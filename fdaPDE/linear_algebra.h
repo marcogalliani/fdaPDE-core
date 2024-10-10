@@ -22,8 +22,6 @@
 #include "linear_algebra/smw.h"
 #include "linear_algebra/sparse_block_matrix.h"
 #include "linear_algebra/lumping.h"
-#include "linear_algebra/fspai.h"
-#include "linear_algebra/lumping.h"
 
 #include "fdaPDE/linear_algebra/randomized_algorithms/rand_range_finder.h"
 #include "fdaPDE/linear_algebra/randomized_algorithms/randomized_svd.h"
