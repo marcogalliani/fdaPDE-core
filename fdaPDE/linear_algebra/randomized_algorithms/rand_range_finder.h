@@ -351,7 +351,7 @@ public:
             R_.block(colR_.rows(),j*block_sz_,block_sz_,block_sz_) = blockR_.topRows(block_sz_);
             //updating Z and T
             Z_.middleCols(j*block_sz_,block_sz_) = A_ * Y_.middleCols(j*block_sz_,block_sz_);
-            T_ = R_.block(0,0,(j+1)*block_sz_,(j+1)*block_sz_).triangularView<Eigen::Upper>().toDenseMatrix().transpose();
+            T_ = R_.block(0,0,(j+1)*block_sz_,(j+1)*block_sz_).template triangularView<Eigen::Upper>().toDenseMatrix().transpose();
             //updating dimensions
             sizeX_ = (j+1)*block_sz_;
             sizeY_ = (j+1)*block_sz_;
@@ -376,7 +376,7 @@ public:
             //updating W matrix and T
             W_.middleCols(j*block_sz_,block_sz_) = A_.transpose() * X_.middleCols(j*block_sz_,block_sz_);
             T_.resize((j+1)*block_sz_,j*block_sz_);
-            T_ << S_.block(0,0,block_sz_,j*block_sz_), S_.block(block_sz_,0,j*block_sz_, j*block_sz_).triangularView<Eigen::Upper>().toDenseMatrix();
+            T_ << S_.block(0,0,block_sz_,j*block_sz_), S_.block(block_sz_,0,j*block_sz_, j*block_sz_).template triangularView<Eigen::Upper>().toDenseMatrix();
             //updating dimensions
             sizeX_ = (j+1)*block_sz_;
             sizeY_ = j*block_sz_;
