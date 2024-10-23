@@ -21,6 +21,7 @@ private:
     DVector<double> Sigma_;
     int tr_rank_;
 public:
+    explicit TruncatedSVD(int tr_rank) : tr_rank_(tr_rank){}
     TruncatedSVD(const MatrixType &A, int tr_rank) : tr_rank_(tr_rank){
         compute(A);
     }
@@ -31,12 +32,12 @@ public:
             V_ = svd.matrixV().leftCols(tr_rank_);
             Sigma_ = svd.singularValues().head(tr_rank_);
         }else if constexpr(SVDpol==RandSVD_SI){
-            RandomizedSVD<MatrixType,SubspaceIterations> svd(A);
+            RandomizedSVD<MatrixType,SubspaceIterations> svd(A, tr_rank_);
             U_ = svd.matrixU().leftCols(tr_rank_);
             V_ = svd.matrixV().leftCols(tr_rank_);
             Sigma_ = svd.singularValues().head(tr_rank_);
         }else if constexpr(SVDpol==RandSVD_BKI){
-            RandomizedSVD<MatrixType,BlockKrylovIterations> svd(A);
+            RandomizedSVD<MatrixType,BlockKrylovIterations> svd(A, tr_rank_);
             U_ = svd.matrixU().leftCols(tr_rank_);
             V_ = svd.matrixV().leftCols(tr_rank_);
             Sigma_ = svd.singularValues().head(tr_rank_);

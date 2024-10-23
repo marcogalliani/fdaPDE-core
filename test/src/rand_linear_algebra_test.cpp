@@ -20,6 +20,8 @@
 using fdapde::core::RandomizedSVD;
 using fdapde::core::RandomizedRangeFinder;
 
+using fdapde::core::TruncatedSVD;
+
 using fdapde::core::RandomizedEVD;
 
 using fdapde::core::IterationPolicy;
@@ -145,4 +147,30 @@ TEST(nystrom_randomized_svd, reconstruction_accuracy){
 
     EXPECT_TRUE(std::pow((A-rbki_reconstruction).norm(),2) < std::pow(tol*A.norm(),2));
     EXPECT_TRUE(std::pow((A-rpchol_reconstruction).norm(),2) < std::pow(tol*A.norm(),2));
+}
+
+TEST(truncated_svd, square_test){
+    DMatrix<double> A = DMatrix<double>::Random(20,20);
+    int tr_rank = 3;
+    double tol = 1e-3; //default tolerance for RandomizedSVD
+
+    using fdapde::core::SVDPolicy;
+    TruncatedSVD<decltype(A),SVDPolicy::JacobiSVD> TrSVD_Jacobi(tr_rank);
+    TruncatedSVD<decltype(A),SVDPolicy::RandSVD_SI> TrSVD_SI(tr_rank);
+    TruncatedSVD<decltype(A),SVDPolicy::RandSVD_BKI> TrSVD_BKI(tr_rank);
+
+    TrSVD_Jacobi.compute(A);
+    TrSVD_SI.compute(A);
+    TrSVD_BKI.compute(A);
+
+    EXPECT_TRUE((TrSVD_Jacobi.singularValues().head(tr_rank)-TrSVD_SI.singularValues()).lpNorm<2>() < tol);
+    EXPECT_TRUE((TrSVD_Jacobi.singularValues().head(tr_rank)-TrSVD_BKI.singularValues()).lpNorm<2>() < tol);
+
+    //using a different constructor
+    TrSVD_Jacobi = TruncatedSVD<decltype(A),SVDPolicy::JacobiSVD>(A,tr_rank);
+    TrSVD_SI = TruncatedSVD<decltype(A),SVDPolicy::RandSVD_SI>(A,tr_rank);
+    TrSVD_BKI = TruncatedSVD<decltype(A),SVDPolicy::RandSVD_BKI>(A,tr_rank);
+
+    EXPECT_TRUE((TrSVD_Jacobi.singularValues().head(tr_rank)-TrSVD_SI.singularValues()).lpNorm<2>() < tol);
+    EXPECT_TRUE((TrSVD_Jacobi.singularValues().head(tr_rank)-TrSVD_BKI.singularValues()).lpNorm<2>() < tol);
 }
