@@ -22,10 +22,9 @@
 #include "linear_algebra/smw.h"
 #include "linear_algebra/sparse_block_matrix.h"
 #include "linear_algebra/lumping.h"
-#include "linear_algebra/truncated_svd.h"
 
-#include "fdaPDE/linear_algebra/randomized_algorithms/rand_range_finder.h"
-#include "fdaPDE/linear_algebra/randomized_algorithms/randomized_svd.h"
-#include "fdaPDE/linear_algebra/randomized_algorithms/rand_nys_approximation.h"
+#include "fdaPDE/linear_algebra/randomized_algorithms/rsvd.h"
+#include "fdaPDE/linear_algebra/randomized_algorithms/revd.h"
+#include "fdaPDE/linear_algebra/randomized_algorithms/nystrom.h"
 
 #endif   // __FDAPDE_LINEAR_ALGEBRA_MODULE_H__
