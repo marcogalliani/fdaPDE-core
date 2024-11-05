@@ -110,7 +110,7 @@ TEST(rand_evd_test, rank_deficient){
     EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-nys_rbki.eigenValues()).template lpNorm<2>() < tol);
 }
 
-TEST(nys_approximation, rp_chol){
+TEST(nys_approximation, block_equal_one){
     DMatrix<double> A = DMatrix<double>::Random(40,20);
     A = A*A.transpose();
     int block_sz = 1;
@@ -122,3 +122,16 @@ TEST(nys_approximation, rp_chol){
 
     EXPECT_TRUE((A-rp_chol.factor()*rp_chol.factor().transpose()).norm() < tol*A.norm());
 }
+
+TEST(nys_approximation, block_larger_than_one){
+    DMatrix<double> A = DMatrix<double>::Random(40,40);
+    A = A*A.transpose();
+    int block_sz = 7;
+    unsigned int seed = fdapde::random_seed; double tol = 1e-3;
+
+    NystromApproximation<DMatrix<double>> rp_chol(std::make_unique<RPChol<DMatrix<double>>>(seed,tol));
+    rp_chol.compute(A,block_sz);
+
+    EXPECT_TRUE((A-rp_chol.factor()*rp_chol.factor().transpose()).norm() < tol*A.norm());
+}
+

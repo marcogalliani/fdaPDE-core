@@ -41,35 +41,37 @@ public:
     RPChol(unsigned int seed, double tol) : NysApproxStrategy<MatrixType>(seed,tol){}
     void compute(const MatrixType &A, int block_sz, int max_iter) override{
         //params init
-        max_iter = std::min(max_iter,(int)std::ceil((double)A.cols()/(double)block_sz)-1);
+        max_iter = std::min(max_iter,(int)std::ceil((double)A.cols()/(double)block_sz));
         std::mt19937 rng{this->seed_};
         this->shift_ = std::numeric_limits<double>::epsilon()*A.trace();
         //factor init
         std::vector<int> ind_cols_A(A.cols());
         std::iota(ind_cols_A.begin(),ind_cols_A.end(),0);
         DVector<double> diag_res = A.diagonal();
-        this->F_ = DMatrix<double>::Zero(A.rows(),A.cols());
+        this->F_ = DMatrix<double>::Zero(A.rows(),max_iter*block_sz);
         //error
         double norm_A=A.norm(), reconstruction_err = norm_A;
         //iterations
         int n_cols_F = 0;
-        for(int i=0; i<max_iter && reconstruction_err>this->tol_*norm_A;i++){
+        while(n_cols_F<max_iter*block_sz && reconstruction_err>this->tol_*norm_A){
             //sampling
             std::discrete_distribution<int> sampling_distr(diag_res.begin(),diag_res.end());
             std::unordered_set<int> sampled_pivots(block_sz);
-            while((int)sampled_pivots.size()<block_sz) sampled_pivots.insert(sampling_distr(rng));
+            for(int j=0; (int)sampled_pivots.size()<block_sz && j<2*block_sz; j++){
+              sampled_pivots.insert(sampling_distr(rng));
+            }
             std::vector<int> pivot_set(sampled_pivots.begin(),sampled_pivots.end()); //converting for Eigen slicing
             //building the F factor
             DMatrix<double> G = A(Eigen::all,pivot_set);
-            G = G - this->F_.leftCols(i*block_sz) * this->F_(pivot_set,Eigen::all).leftCols(i*block_sz).transpose();
+            G = G - this->F_.leftCols(n_cols_F) * this->F_(pivot_set,Eigen::all).leftCols(n_cols_F).transpose();
             double shift = std::numeric_limits<double>::epsilon()*G(pivot_set,Eigen::all).trace();
-            Eigen::LLT<DMatrix<double>> chol(G(pivot_set,Eigen::all) + shift*DMatrix<double>::Identity(block_sz,block_sz));
+            Eigen::LLT<DMatrix<double>> chol(G(pivot_set,Eigen::all) + shift*DMatrix<double>::Identity(pivot_set.size(),pivot_set.size()));
             DMatrix<double> T = chol.matrixU().solve<Eigen::OnTheRight>(G);
-            this->F_.middleCols(i*block_sz,block_sz) = T;
+            this->F_.middleCols(n_cols_F,pivot_set.size()) = T;
             //update the sampling distribution
             diag_res = (diag_res - T.rowwise().squaredNorm()).array().max(0);
             //update the error
-            n_cols_F += block_sz;
+            n_cols_F += pivot_set.size();
             reconstruction_err =  (A-this->F_.leftCols(n_cols_F)*this->F_.leftCols(n_cols_F).transpose()).norm();
         }
         this->F_ = this->F_.leftCols(n_cols_F);
