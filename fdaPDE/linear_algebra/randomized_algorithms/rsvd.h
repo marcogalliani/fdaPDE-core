@@ -41,7 +41,7 @@ std::pair<DMatrix<double>,DMatrix<double>> BCGS_plus(const DMatrix<double> &X, c
     orth_block = qr.householderQ() * DMatrix<double>::Identity(new_block.rows(),new_block.cols());
     //orthogonalization w.r.t. previous blocks
     orth_block =
-            (DMatrix<double>::Identity(new_block.rows(),new_block.rows()) - X*X.transpose()) * new_block;
+            (DMatrix<double>::Identity(new_block.rows(),new_block.rows()) - X*X.transpose()) * orth_block;
     //orthogonalization of the block
     qr.compute(orth_block);
     orth_block = qr.householderQ() * DMatrix<double>::Identity(new_block.rows(),new_block.cols());
