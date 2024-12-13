@@ -32,16 +32,12 @@ DMatrix<double> GaussianMatrix(size_t rows, size_t cols, unsigned int seed=fdapd
 
 //Block Classical Gram-Schmidt+ algorithm
 std::pair<DMatrix<double>,DMatrix<double>> BCGS_plus(const DMatrix<double> &X, const DMatrix<double> &new_block){
-    DMatrix<double> orth_block;
+    Eigen::HouseholderQR<DMatrix<double>> qr;
+    DMatrix<double> X_orth_space_proj = (DMatrix<double>::Identity(new_block.rows(),new_block.rows()) - X*X.transpose());
     //orthogonalization w.r.t. previous blocks
-    orth_block =
-            (DMatrix<double>::Identity(new_block.rows(),new_block.rows()) - X*X.transpose()) * new_block;
-    //orthogonalization of the block
-    Eigen::HouseholderQR<DMatrix<double>> qr(orth_block);
-    orth_block = qr.householderQ() * DMatrix<double>::Identity(new_block.rows(),new_block.cols());
-    //orthogonalization w.r.t. previous blocks
-    orth_block =
-            (DMatrix<double>::Identity(new_block.rows(),new_block.rows()) - X*X.transpose()) * orth_block;
+    DMatrix<double> orth_block = X_orth_space_proj * new_block;
+    //reorthogonalization w.r.t. previous blocks
+    orth_block = X_orth_space_proj * orth_block;
     //orthogonalization of the block
     qr.compute(orth_block);
     orth_block = qr.householderQ() * DMatrix<double>::Identity(new_block.rows(),new_block.cols());
@@ -115,6 +111,52 @@ public:
 };
 
 template<typename MatrixType>
+class GeneralizedRSI : public RSVDStrategy<MatrixType>{
+public:
+    GeneralizedRSI()=default;
+    GeneralizedRSI(unsigned int seed, double tol) : RSVDStrategy<MatrixType>(seed,tol){}
+    void compute(const MatrixType &A, int rank, int max_iter) override{
+        //params init
+        int max_rank = std::min(A.rows(),A.cols());
+        int block_sz = std::min(2*rank,max_rank); //default setting
+        max_iter = std::min(max_iter, max_rank);
+        //X,Y init
+        Eigen::HouseholderQR<DMatrix<double>> qr(A*fdapde::internals::GaussianMatrix(A.cols(), block_sz, this->seed_));
+        DMatrix<double> X = qr.householderQ()*DMatrix<double>::Identity(A.rows(),block_sz);
+        DMatrix<double> Y;
+        //Subspace Iterations
+        Eigen::JacobiSVD<DMatrix<double>> svd;
+        DMatrix<double> E;
+        double res_err = this->tol_+1;
+        double norm_A = A.norm();
+        for(int i=0; res_err>this->tol_*norm_A && i< max_iter; i++){
+            if(i%2 == 0){
+                Y = A.transpose() * X;
+                qr.compute(Y);
+                Y = qr.householderQ()*DMatrix<double>::Identity(Y.rows(),block_sz);
+                DMatrix<double> T = qr.matrixQR().triangularView<Eigen::Upper>();
+                //error update
+                svd.compute(T.topRows(block_sz).transpose(), Eigen::ComputeThinU | Eigen::ComputeThinV);
+                E = A*Y*svd.matrixV().leftCols(rank) - X*svd.matrixU().leftCols(rank)*svd.singularValues().head(rank).asDiagonal();
+            }else{
+                X = A *Y;
+                qr.compute(X);
+                X = qr.householderQ()*DMatrix<double>::Identity(X.rows(),block_sz);
+                DMatrix<double> T = qr.matrixQR().triangularView<Eigen::Upper>();
+                //error update
+                svd.compute(T.topRows(block_sz), Eigen::ComputeThinU | Eigen::ComputeThinV);
+                E = A.transpose()*X*svd.matrixU().leftCols(rank) - Y*svd.matrixV().leftCols(rank)*svd.singularValues().head(rank).asDiagonal();
+            }
+            res_err = E.colwise().template lpNorm<2>().maxCoeff();
+        }
+        this->U_ = X*svd.matrixU().leftCols(rank);
+        this->V_ = Y*svd.matrixV().leftCols(rank);
+        this->Sigma_ = svd.singularValues().head(rank);
+        return;
+    }
+};
+
+template<typename MatrixType>
 class RBKI : public RSVDStrategy<MatrixType>{
 public:
     RBKI()=default;
@@ -156,6 +198,85 @@ public:
         rank = std::min((int)svd.singularValues().size(), rank);
         this->U_ = Q.leftCols(n_cols_Q)*svd.matrixU().leftCols(rank);
         this->V_ = svd.matrixV().leftCols(rank);
+        this->Sigma_ = svd.singularValues().head(rank);
+        return;
+    }
+};
+
+template<typename MatrixType>
+class GeneralizedRBKI : public RSVDStrategy<MatrixType>{
+public:
+    GeneralizedRBKI()=default;
+    GeneralizedRBKI(unsigned int seed, double tol) : RSVDStrategy<MatrixType>(seed,tol){}
+    void compute(const MatrixType &A, int rank, int max_iter) override{
+        //params init
+        int block_sz; //default setting for RBKI
+        if(A.rows()<=100){
+            block_sz = 1;
+        }else{
+            block_sz = 10;
+        }
+        int max_dim = std::ceil((double)std::min(A.rows(), A.cols())/(double)block_sz)*block_sz;
+        max_iter = std::min(max_iter,max_dim/block_sz);
+
+        //Initialising matrices
+        DMatrix<double > X(A.rows(),max_dim), Z(A.rows(),max_dim);
+        DMatrix<double> Y(A.cols(),max_dim), W(A.cols(),max_dim);
+        DMatrix<double> R=DMatrix<double>::Zero(max_dim,max_dim), S=DMatrix<double>::Zero(max_dim+block_sz,max_dim);
+
+        Eigen::HouseholderQR<DMatrix<double>> qr;
+        X.leftCols(block_sz) = A * fdapde::internals::GaussianMatrix(A.cols(),block_sz,this->seed_);
+        qr.compute(X.leftCols(block_sz));
+        X.leftCols(block_sz) = qr.householderQ() * DMatrix<double>::Identity(A.rows(),block_sz);
+        W.leftCols(block_sz) = A.transpose() * X.leftCols(block_sz);
+
+        //Block Krylov Iterations
+        Eigen::JacobiSVD<DMatrix<double>> svd;
+        DMatrix<double> E;
+        double res_err = this->tol_+1;
+        double norm_A = A.norm();
+        int sizeX = block_sz, sizeY = 0;
+        for(int i=0; res_err > this->tol_*norm_A && i < max_iter; i++){
+            if(i%2 == 0){
+                int j = i/2; //complete iteration index (i: half-iteration index)
+                Y.middleCols(j*block_sz,block_sz) = W.middleCols(j*block_sz,block_sz);
+                DMatrix<double> colR = Y.leftCols(j*block_sz).transpose() * Y.middleCols(j*block_sz,block_sz);
+                //orthogonalisation of the new block
+                auto Y_bcgs = fdapde::internals::BCGS_plus(Y.leftCols(j*block_sz), Y.middleCols(j*block_sz,block_sz));
+                Y.middleCols(j*block_sz,block_sz) = Y_bcgs.first;
+                //assembling the R matrix
+                R.block(0,j*block_sz,colR.rows(),block_sz) = colR;
+                R.block(colR.rows(),j*block_sz,block_sz,block_sz) = Y_bcgs.second;
+                //updating Z
+                Z.middleCols(j*block_sz,block_sz) = A * Y.middleCols(j*block_sz,block_sz);
+                //updating dimensions
+                sizeY += block_sz;
+                //error update
+                svd.compute(R.block(0,0,(j+1)*block_sz,(j+1)*block_sz).triangularView<Eigen::Upper>().toDenseMatrix().transpose(), Eigen::ComputeThinU | Eigen::ComputeThinV);
+                E = Z.leftCols(sizeX)*svd.matrixV().leftCols(std::min(rank,sizeX)) - X.leftCols(sizeX)*(svd.matrixU().leftCols(std::min(rank,sizeX)))*svd.singularValues().head(std::min(rank,sizeX)).asDiagonal();
+            }else{
+                int j = (i+1)/2; //complete iteration index (i: half-iteration index)
+                X.middleCols(j*block_sz,block_sz) = Z.middleCols((j-1)*block_sz,block_sz);
+                DMatrix<double> colS = X.leftCols(j*block_sz).transpose() * X.middleCols(j*block_sz,block_sz);
+                //orthogonalisation of the new block
+                auto X_bcgs = fdapde::internals::BCGS_plus(X.leftCols(j*block_sz), X.middleCols(j*block_sz,block_sz));
+                X.middleCols(j*block_sz,block_sz) = X_bcgs.first;
+                //assembling the S matrix
+                S.block(0,(j-1)*block_sz,colS.rows(),block_sz) = colS;
+                S.block(colS.rows(), (j-1)*block_sz,block_sz,block_sz) = X_bcgs.second;
+                //updating W matrix and T
+                W.middleCols(j*block_sz,block_sz) = A.transpose() * X.middleCols(j*block_sz,block_sz);
+                //updating dimensions
+                sizeX += block_sz;
+                //error update
+                svd.compute(S.block(0,0,(j+1)*block_sz,j*block_sz), Eigen::ComputeThinU | Eigen::ComputeThinV);
+                E = W.leftCols(sizeX)*svd.matrixU().leftCols(std::min(rank,sizeY)) - Y.leftCols(sizeY)*svd.matrixV().leftCols(std::min(rank,sizeY))*svd.singularValues().head(std::min(rank,sizeY)).asDiagonal();
+            }
+            res_err =  E.colwise().template lpNorm<2>().maxCoeff();
+        }
+        rank = std::min((int)svd.singularValues().size(), rank);
+        this->U_ = X.leftCols(sizeX)*svd.matrixU().leftCols(rank);
+        this->V_ = Y.leftCols(sizeY)*svd.matrixV().leftCols(rank);
         this->Sigma_ = svd.singularValues().head(rank);
         return;
     }

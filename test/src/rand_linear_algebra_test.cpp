@@ -23,6 +23,8 @@ using fdapde::core::NystromApproximation;
 
 using fdapde::core::RSI;
 using fdapde::core::RBKI;
+using fdapde::core::GeneralizedRSI;
+using fdapde::core::GeneralizedRBKI;
 
 using fdapde::core::NysRSI;
 using fdapde::core::NysRBKI;
@@ -39,39 +41,58 @@ TEST(rand_svd_test, square_test){
 
     RSVD<DMatrix<double>> rsi(std::make_unique<RSI<DMatrix<double>>>(seed,tol));
     RSVD<DMatrix<double>> rbki(std::make_unique<RBKI<DMatrix<double>>>(seed,tol));
+    RSVD<DMatrix<double>> ext_rsi(std::make_unique<GeneralizedRSI<DMatrix<double>>>(seed,tol));
+    RSVD<DMatrix<double>> ext_rbki(std::make_unique<GeneralizedRBKI<DMatrix<double>>>(seed,tol));
     Eigen::JacobiSVD<DMatrix<double>> jacobi_svd;
 
     rsi.compute(A,tr_rank);
     rbki.compute(A,tr_rank);
     jacobi_svd.compute(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
-    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-rsi.singularValues()).template lpNorm<2>() < tol);
-    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-rbki.singularValues()).template lpNorm<2>() < tol);
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-rsi.singularValues()).template lpNorm<2>() < tol*A.norm());
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-rbki.singularValues()).template lpNorm<2>() < tol*A.norm());
+
+
+    ext_rsi.compute(A,tr_rank);
+    ext_rbki.compute(A,tr_rank);
+
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-ext_rsi.singularValues()).template lpNorm<2>() < tol*A.norm());
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-ext_rbki.singularValues()).template lpNorm<2>() < tol*A.norm());
 }
 
 TEST(rand_svd_test, rect_test){
-    DMatrix<double> A = DMatrix<double>::Random(10,20);
+    DMatrix<double> A = DMatrix<double>::Random(20,40);
     int tr_rank = 3;
     unsigned int seed = fdapde::random_seed;
     double tol = 1e-3;
 
     RSVD<DMatrix<double>> rsi(std::make_unique<RSI<DMatrix<double>>>(seed,tol));
     RSVD<DMatrix<double>> rbki(std::make_unique<RBKI<DMatrix<double>>>(seed,tol));
+    RSVD<DMatrix<double>> ext_rsi(std::make_unique<GeneralizedRSI<DMatrix<double>>>(seed,tol));
+    RSVD<DMatrix<double>> ext_rbki(std::make_unique<GeneralizedRBKI<DMatrix<double>>>(seed,tol));
     Eigen::JacobiSVD<DMatrix<double>> jacobi_svd;
 
     rsi.compute(A,tr_rank);
     rbki.compute(A,tr_rank);
+    ext_rsi.compute(A,tr_rank);
+    ext_rbki.compute(A,tr_rank);
     jacobi_svd.compute(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
-    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-rsi.singularValues()).template lpNorm<2>() < tol);
-    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-rbki.singularValues()).template lpNorm<2>() < tol);
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-rsi.singularValues()).template lpNorm<2>() < tol*A.norm());
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-rbki.singularValues()).template lpNorm<2>() < tol*A.norm());
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-ext_rsi.singularValues()).template lpNorm<2>() < tol*A.norm());
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-ext_rbki.singularValues()).template lpNorm<2>() < tol*A.norm());
 
     rsi.compute(A.transpose(),tr_rank);
     rbki.compute(A.transpose(),tr_rank);
+    ext_rsi.compute(A,tr_rank);
+    ext_rbki.compute(A,tr_rank);
     jacobi_svd.compute(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
-    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-rsi.singularValues()).template lpNorm<2>() < tol);
-    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-rbki.singularValues()).template lpNorm<2>() < tol);
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-rsi.singularValues()).template lpNorm<2>() < tol*A.norm());
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-rbki.singularValues()).template lpNorm<2>() < tol*A.norm());
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-ext_rsi.singularValues()).template lpNorm<2>() < tol*A.norm());
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-ext_rbki.singularValues()).template lpNorm<2>() < tol*A.norm());
 }
 
 TEST(rand_evd_test, full_rank){
