@@ -1,0 +1,108 @@
+---
+title: "Experiments on SVD"
+params:
+  n_cores: 1
+  rows:
+    value: 1000
+    input: select
+    choice: [1000,"VAR"]
+  cols:
+    value: "VAR"
+    input: select
+    choice: [1000,"VAR"]
+---
+
+## File of params
+```{r}
+if(params[["rows"]]=="VAR"){
+  variable_dim <- "rows"
+  fixed_dim <- "cols"
+}else {
+  variable_dim <- "cols"
+  fixed_dim <- "rows"
+}
+```
+
+```{r}
+library(jsonlite)
+json_data <- fromJSON("params.json")
+
+json_data$TestMatrix[[variable_dim]] <- unbox(1000)
+json_data$TestMatrix[[fixed_dim]] <- unbox(1000)
+
+json_data$RunParams$truncation_param <- unbox(10)
+
+json_data$RSI$block_size <- unbox(200)
+
+json_data$RBKI$block_size <- unbox(10)
+
+json_data$RunParams$seed <- unbox(7050)
+json_data$RunParams$n_cores <- unbox(1)
+```
+
+
+
+
+## Varying the matrix dimension
+Storing the result
+```{r}
+test_size <- c(1000,2000,3000,4000,5000)
+tested_SVDs <- c("rsi","rsi_ext","rbki","rbki_ext","exact")
+
+test_results <- data.frame(svd = rep(tested_SVDs, times=length(test_size)),
+              size = rep(test_size, each=length(tested_SVDs)),
+              exeTime = NA, singValErr = NA, l_singVecErr = NA, r_singVecErr = NA
+              )
+```
+
+Actual computation
+```{r}
+library(dplyr)
+library(Matrix)
+
+for(matSize in test_size){
+  json_data$TestMatrix[[variable_dim]] <- unbox(matSize)
+
+  cat("\nRows:", json_data$TestMatrix$rows,"\n")
+  cat("Cols:", json_data$TestMatrix$cols,"\n")
+  
+  for(method in tested_SVDs){
+    cat("SVD: ", method,"\n")
+    #setting the method
+    json_data$RunParams$method <- unbox(method)
+    write_json(json_data, "params.json", pretty = TRUE)
+    
+    #computation
+    system("/Users/marcogalliani/Desktop/fdaPDE-core/cmake-build-default/experiments/test_randSVD/randSVD")
+    
+    current_exeTime <- read.csv(file="results/exe_times.csv",header=F)[[1]][1]
+    current_SingValErr <- read.csv(file="results/sing_val_err.csv",header=F)[[1]][1]
+    
+    current_l_SingVecErr <- as.vector(readMM(file="results/l_sing_vecs_err.mtx"))
+    current_r_SingVecErr <- as.vector(readMM(file="results/r_sing_vecs_err.mtx"))
+    
+    test_results <- test_results %>%
+        mutate(
+          exeTime = ifelse(svd==method & size==matSize, current_exeTime, exeTime),
+          singValErr = ifelse(svd==method & size==matSize, 
+                              current_SingValErr, singValErr),
+          l_singVecErr =  ifelse(svd==method & size==matSize, 
+                                 max(current_l_SingVecErr), l_singVecErr),
+          r_singVecErr = ifelse(svd==method & size==matSize, 
+                                 max(current_r_SingVecErr), r_singVecErr),
+        )
+  }
+}
+```
+
+# Saving results
+```{r}
+write.csv(format(test_results, digits = 16),
+          paste("past-runs",
+                paste("RandSVD",
+                      "-rows",params$rows,
+                      "-cols",params$cols,
+                      ".csv",sep=""),
+          sep="/")
+)
+```

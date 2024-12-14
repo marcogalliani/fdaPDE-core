@@ -1,4 +1,5 @@
 *.txt
+!CMakeLists.txt
 *.json
 *.cmake
 *Makefile
@@ -25,12 +26,15 @@ experiments/test_RSVD/performances.csv
 *.pdf
 *.png
 
-#help files
-*.csv
-
 #docs files
 *.puml
-.Rproj.user
 
-#some test directories
-experiments/
+#R files
+.Rproj.user
+*.Rproj
+*.html
+
+#files in the experiments directory
+experiments/**/*.csv
+experiments/**/*.mtx
+
