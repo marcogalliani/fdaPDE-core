@@ -1,0 +1,40 @@
+---
+title: "plot-utils"
+---
+
+```{r}
+test_results <- read.csv("results/randEVD_comparison.csv",header = T)
+```
+
+```{r}
+source("../r-utils/plot_utils.R")
+
+library(scales)
+library(cowplot)
+library(grid)
+library(gridExtra) 
+
+col_palette <- hue_pal()(6)
+color_map <- c(
+  "scikit-learn" = col_palette[1],
+  "rsi" = col_palette[2],
+  #"rbki" = col_palette[3],
+  "nys_rsi" = col_palette[4],
+  "nys_rbki" = col_palette[5],
+  "exact" = col_palette[6]
+)
+```
+
+```{r}
+for(err in c("rec_error","eig_val_error","eig_vect_error")){
+  curr_plot <- grouped_boxplot(
+    subset(test_results, decay=="slow" & !(svd %in% c("rbki","nys_rbki"))),
+    "accuracy",
+    var_name.x = "decay", var_name.y = err,
+    group_name = "svd", color_map = color_map, legend = T,
+    log.y = T
+  ) 
+  print(curr_plot)
+}
+```
+

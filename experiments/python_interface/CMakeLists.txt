@@ -19,6 +19,6 @@ set(CMAKE_SHARED_LIBRARY_CXX_FLAGS "${OpenMP_CXX_FLAGS} ${CMAKE_SHARED_LIBRARY_C
 include_directories(../..)
 include_directories(${json_SOURCE_DIR}/include/)
 
-pybind11_add_module(randSVD randSVD_pymodule.cpp)
-target_link_libraries(randSVD PRIVATE Eigen3::Eigen)
+pybind11_add_module(randSVD_py randSVD_pymodule.cpp)
+target_link_libraries(randSVD_py PRIVATE Eigen3::Eigen)
 

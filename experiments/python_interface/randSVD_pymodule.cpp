@@ -9,12 +9,15 @@ namespace py = pybind11;
 
 #include "fdaPDE/linear_algebra.h"
 using fdapde::core::RSVDStrategy;
+using fdapde::core::REVDStrategy;
 
 using fdapde::core::RSI;
 using fdapde::core::RBKI;
 using fdapde::core::GeneralizedRSI;
 using fdapde::core::GeneralizedRBKI;
 
+using fdapde::core::NysRSI;
+using fdapde::core::NysRBKI;
 
 template<typename MatrixType>
 class PyRSVD : public RSVDStrategy<MatrixType> {
@@ -59,5 +62,20 @@ PYBIND11_MODULE(randSVD,m){
     py::class_<d_GenRBKI , d_RSVD>(m, "GeneralizedRBKI")
         .def(py::init<unsigned int, double>())
         .def("compute", &d_GenRBKI ::compute);
+
+    using d_REVD = REVDStrategy<DMatrix<double>>;
+    py::class_<d_REVD>(m, "REVD")
+        .def("matrixU", &d_REVD::matrixU)
+        .def("eigenValues", &d_REVD::eigenValues);
+
+    using d_NysRSI = NysRSI<DMatrix<double>>;
+    py::class_<d_NysRSI, d_REVD>(m, "NysRSI")
+        .def(py::init<unsigned int, double>())
+        .def("compute", &d_NysRSI ::compute);
+
+    using d_NysRBKI = NysRBKI<DMatrix<double>>;
+    py::class_<d_NysRBKI, d_REVD>(m, "NysRBKI")
+        .def(py::init<unsigned int, double>())
+        .def("compute", &d_NysRBKI ::compute);
 }
 
