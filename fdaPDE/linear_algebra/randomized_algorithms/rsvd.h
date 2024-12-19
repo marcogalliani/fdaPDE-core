@@ -236,9 +236,10 @@ public:
         double res_err = this->tol_+1;
         double norm_A = A.norm();
         int sizeX = block_sz, sizeY = 0;
-        for(int i=0; res_err > this->tol_*norm_A && i < max_iter; i++){
+        int j = 0;
+        for(int i=0; res_err > this->tol_*norm_A && j < max_iter; i++){
             if(i%2 == 0){
-                int j = i/2; //complete iteration index (i: half-iteration index)
+                j = i/2; //complete iteration index (i: half-iteration index)
                 Y.middleCols(j*block_sz,block_sz) = W.middleCols(j*block_sz,block_sz);
                 DMatrix<double> colR = Y.leftCols(j*block_sz).transpose() * Y.middleCols(j*block_sz,block_sz);
                 //orthogonalisation of the new block
@@ -255,7 +256,7 @@ public:
                 svd.compute(R.block(0,0,(j+1)*block_sz,(j+1)*block_sz).triangularView<Eigen::Upper>().toDenseMatrix().transpose(), Eigen::ComputeThinU | Eigen::ComputeThinV);
                 E = Z.leftCols(sizeX)*svd.matrixV().leftCols(std::min(rank,sizeX)) - X.leftCols(sizeX)*(svd.matrixU().leftCols(std::min(rank,sizeX)))*svd.singularValues().head(std::min(rank,sizeX)).asDiagonal();
             }else{
-                int j = (i+1)/2; //complete iteration index (i: half-iteration index)
+                j = (i+1)/2; //complete iteration index (i: half-iteration index)
                 X.middleCols(j*block_sz,block_sz) = Z.middleCols((j-1)*block_sz,block_sz);
                 DMatrix<double> colS = X.leftCols(j*block_sz).transpose() * X.middleCols(j*block_sz,block_sz);
                 //orthogonalisation of the new block
@@ -301,6 +302,13 @@ public:
     DMatrix<double> matrixV() const{ return rsvd_strategy_->matrixV();}
     DVector<double> singularValues() const{ return rsvd_strategy_->singularValues();}
 };
+
+//a trait to detect the usage of randomized svd
+template <typename T>
+struct is_rand_svd : std::false_type {};
+
+template <typename T>
+struct is_rand_svd<RSVD<T>> : std::true_type {};
 
 }//core
 }//fdpade

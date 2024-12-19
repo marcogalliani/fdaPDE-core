@@ -47,7 +47,7 @@ public:
         int max_rank = A.rows(); //equal to A.cols()
         int block_sz = std::min(2*rank,max_rank); //default setting
         max_iter = std::min(max_iter, max_rank);
-        double shift = A.trace()*std::numeric_limits<double>::epsilon();
+        double shift = A.diagonal().sum()*std::numeric_limits<double>::epsilon();
         //factor init
         DMatrix<double> Y = fdapde::internals::GaussianMatrix(A.rows(), block_sz, this->seed_);
         DMatrix<double> X;
@@ -86,13 +86,13 @@ public:
         //params init
         int max_rank = A.rows(); //equal to A.cols()
         int block_sz; //default setting
-        if(A.rows()<1000){
+        if(A.rows()<100){
             block_sz = 1;
         }else{
             block_sz = 10;
         }
         max_iter = std::min(max_iter,max_rank/block_sz-1);
-        double shift = A.trace()*std::numeric_limits<double>::epsilon();
+        double shift = A.diagonal().sum()*std::numeric_limits<double>::epsilon();
         //factor init
         DMatrix<double> X,Y,S,F;
         X.resize(A.rows(),max_rank); Y.resize(A.rows(),max_rank);
@@ -155,6 +155,13 @@ public:
     DMatrix<double> matrixU() const{ return revd_strategy_->matrixU();}
     DVector<double> eigenValues() const{ return revd_strategy_->eigenValues();}
 };
+
+//a trait to detect the usage of randomized evd
+template <typename T>
+struct is_rand_evd : std::false_type {};
+
+template <typename T>
+struct is_rand_evd<REVD<T>> : std::true_type {};
 
 }//core
 }//fdpade
