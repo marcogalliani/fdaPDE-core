@@ -288,7 +288,7 @@ class RSVD{
 private:
     std::unique_ptr<RSVDStrategy<MatrixType>> rsvd_strategy_;
 public:
-    explicit RSVD(std::unique_ptr<RSVDStrategy<MatrixType>> &&strategy=std::make_unique<RSI<DMatrix<double>>>()): rsvd_strategy_(std::move(strategy)){}
+    explicit RSVD(std::unique_ptr<RSVDStrategy<MatrixType>> &&strategy=std::make_unique<RSI<MatrixType>>()): rsvd_strategy_(std::move(strategy)){}
     void compute(const MatrixType &A, int rank, int max_iter=1e3){
         rsvd_strategy_->compute(A,rank,max_iter);
         return;

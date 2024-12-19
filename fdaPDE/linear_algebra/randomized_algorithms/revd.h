@@ -142,7 +142,7 @@ private:
     DMatrix<double> U_;
     DVector<double> Lambda_;
 public:
-    explicit REVD(std::unique_ptr<REVDStrategy<MatrixType>> &&strategy=std::make_unique<NysRSI<DMatrix<double>>>()): revd_strategy_(std::move(strategy)){}
+    explicit REVD(std::unique_ptr<REVDStrategy<MatrixType>> &&strategy=std::make_unique<NysRSI<MatrixType>>()): revd_strategy_(std::move(strategy)){}
     void compute(const MatrixType &A, int tr_rank, int max_iter=1e3){
         revd_strategy_->compute(A,tr_rank,max_iter);
         return;
