@@ -60,6 +60,7 @@ public:
     RSVDStrategy()=default;
     RSVDStrategy(unsigned int seed, double tol) : seed_(seed), tol_(tol){}
     virtual void compute(const MatrixType &A, int rank, int max_iter) = 0;
+    virtual std::unique_ptr<RSVDStrategy<MatrixType>> clone() const = 0;
     //setter
     void setTol(double tol){ tol_=tol;}
     void setSeed(unsigned int seed){ seed_=seed;}
@@ -108,6 +109,9 @@ public:
         this->Sigma_ = svd.singularValues().head(rank);
         return;
     }
+    std::unique_ptr<RSVDStrategy<MatrixType>> clone() const override{
+        return std::make_unique<RSI<MatrixType>>(this->seed_,this->tol_);
+    };
 };
 
 template<typename MatrixType>
@@ -154,6 +158,9 @@ public:
         this->Sigma_ = svd.singularValues().head(rank);
         return;
     }
+    std::unique_ptr<RSVDStrategy<MatrixType>> clone() const override{
+        return std::make_unique<GeneralizedRSI<MatrixType>>(this->seed_,this->tol_);
+    };
 };
 
 template<typename MatrixType>
@@ -201,6 +208,9 @@ public:
         this->Sigma_ = svd.singularValues().head(rank);
         return;
     }
+    std::unique_ptr<RSVDStrategy<MatrixType>> clone() const override{
+        return std::make_unique<RBKI<MatrixType>>(this->seed_,this->tol_);
+    };
 };
 
 template<typename MatrixType>
@@ -281,6 +291,9 @@ public:
         this->Sigma_ = svd.singularValues().head(rank);
         return;
     }
+    std::unique_ptr<RSVDStrategy<MatrixType>> clone() const override{
+        return std::make_unique<GeneralizedRBKI<MatrixType>>(this->seed_,this->tol_);
+    };
 };
 
 template<typename MatrixType>
@@ -289,6 +302,9 @@ private:
     std::unique_ptr<RSVDStrategy<MatrixType>> rsvd_strategy_;
 public:
     explicit RSVD(std::unique_ptr<RSVDStrategy<MatrixType>> &&strategy=std::make_unique<RSI<MatrixType>>()): rsvd_strategy_(std::move(strategy)){}
+    RSVD(const RSVD& other)
+        : rsvd_strategy_(other.rsvd_strategy_ ? other.rsvd_strategy_->clone() : nullptr){}
+
     void compute(const MatrixType &A, int rank, int max_iter=1e3){
         rsvd_strategy_->compute(A,rank,max_iter);
         return;

@@ -25,6 +25,8 @@ protected:
 public:
     REVDStrategy()=default;
     REVDStrategy(unsigned int seed, double tol) : seed_(seed), tol_(tol){}
+    virtual std::unique_ptr<REVDStrategy<MatrixType>> clone() const = 0;
+
     virtual void compute(const MatrixType &A, int rank, int max_iter) = 0;
     //setters
     void setTol(double tol){ tol_=tol;}
@@ -56,7 +58,7 @@ public:
         //error
         Eigen::JacobiSVD<DMatrix<double>> svd;
         DMatrix<double> E;
-        double norm_A = A.norm(), res_err = norm_A;
+        double norm_A = A.norm(), res_err = this->tol_+1;
         //iterations
         for(int i=0; res_err > this->tol_*norm_A && i<max_iter; ++i) {
             qr.compute(Y);
@@ -74,6 +76,9 @@ public:
         this->U_ = svd.matrixU().leftCols(rank);
         this->Lambda_ = (svd.singularValues().head(rank).array().pow(2)-shift).matrix();
         return;
+    }
+    virtual std::unique_ptr<REVDStrategy<MatrixType>> clone() const override{
+        return std::make_unique<NysRSI<MatrixType>>(this->seed_,this->tol_);
     }
 };
 
@@ -103,7 +108,7 @@ public:
         //error
         Eigen::JacobiSVD<DMatrix<double>> svd;
         DMatrix<double> E;
-        double norm_A=A.norm(), res_err=norm_A;
+        double norm_A=A.norm(), res_err=this->tol_+1;
         //iterations
         int n_cols_X = block_sz;
         for(int i=0; i<max_iter && res_err>this->tol_*norm_A;i++,n_cols_X+=block_sz){
@@ -133,16 +138,19 @@ public:
         this->Lambda_ = (svd.singularValues().head(rank).array().pow(2)-shift).matrix();
         return;
     }
+    virtual std::unique_ptr<REVDStrategy<MatrixType>> clone() const override{
+        return std::make_unique<NysRBKI<MatrixType>>(this->seed_,this->tol_);
+    }
 };
 
 template<typename MatrixType>
 class REVD{
 private:
     std::unique_ptr<REVDStrategy<MatrixType>> revd_strategy_;
-    DMatrix<double> U_;
-    DVector<double> Lambda_;
 public:
     explicit REVD(std::unique_ptr<REVDStrategy<MatrixType>> &&strategy=std::make_unique<NysRSI<MatrixType>>()): revd_strategy_(std::move(strategy)){}
+    REVD(const REVD& other)
+        : revd_strategy_(other.rsvd_strategy_ ? other.rsvd_strategy_->clone() : nullptr){}
     void compute(const MatrixType &A, int tr_rank, int max_iter=1e3){
         revd_strategy_->compute(A,tr_rank,max_iter);
         return;
