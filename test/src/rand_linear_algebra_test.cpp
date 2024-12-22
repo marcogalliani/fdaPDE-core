@@ -47,17 +47,28 @@ TEST(rand_svd_test, square_test){
 
     rsi.compute(A,tr_rank);
     rbki.compute(A,tr_rank);
+    ext_rsi.compute(A,tr_rank);
+    ext_rbki.compute(A,tr_rank);
+
     jacobi_svd.compute(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
     EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-rsi.singularValues()).template lpNorm<2>() < tol*A.norm());
     EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-rbki.singularValues()).template lpNorm<2>() < tol*A.norm());
-
-
-    ext_rsi.compute(A,tr_rank);
-    ext_rbki.compute(A,tr_rank);
-
     EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-ext_rsi.singularValues()).template lpNorm<2>() < tol*A.norm());
     EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-ext_rbki.singularValues()).template lpNorm<2>() < tol*A.norm());
+
+    //test the copy-assignment
+    RSVD<DMatrix<double>> test_copy;
+    test_copy = rsi;
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-test_copy.singularValues()).template lpNorm<2>() < tol*A.norm());
+    test_copy = rbki;
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-test_copy.singularValues()).template lpNorm<2>() < tol*A.norm());
+    test_copy = ext_rsi;
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-test_copy.singularValues()).template lpNorm<2>() < tol*A.norm());
+    test_copy = ext_rbki;
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-test_copy.singularValues()).template lpNorm<2>() < tol*A.norm());
+
+
 }
 
 TEST(rand_svd_test, sparse_test){
@@ -149,6 +160,13 @@ TEST(rand_evd_test, full_rank){
 
     EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-nys_rsi.eigenValues()).template lpNorm<2>() < tol);
     EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-nys_rbki.eigenValues()).template lpNorm<2>() < tol);
+
+    //test the copy-assignment
+    REVD<DMatrix<double>> test_copy;
+    test_copy = nys_rsi;
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-test_copy.eigenValues()).template lpNorm<2>() < tol*A.norm());
+    test_copy = nys_rbki;
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-test_copy.eigenValues()).template lpNorm<2>() < tol*A.norm());
 }
 
 TEST(rand_evd_test, rank_deficient){

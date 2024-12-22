@@ -78,7 +78,7 @@ public:
         return;
     }
     virtual std::unique_ptr<REVDStrategy<MatrixType>> clone() const override{
-        return std::make_unique<NysRSI<MatrixType>>(this->seed_,this->tol_);
+        return std::make_unique<NysRSI<MatrixType>>(*this);
     }
 };
 
@@ -139,7 +139,7 @@ public:
         return;
     }
     virtual std::unique_ptr<REVDStrategy<MatrixType>> clone() const override{
-        return std::make_unique<NysRBKI<MatrixType>>(this->seed_,this->tol_);
+        return std::make_unique<NysRBKI<MatrixType>>(*this);
     }
 };
 
@@ -149,8 +149,18 @@ private:
     std::unique_ptr<REVDStrategy<MatrixType>> revd_strategy_;
 public:
     explicit REVD(std::unique_ptr<REVDStrategy<MatrixType>> &&strategy=std::make_unique<NysRSI<MatrixType>>()): revd_strategy_(std::move(strategy)){}
+    //copy-constructor
     REVD(const REVD& other)
-        : revd_strategy_(other.rsvd_strategy_ ? other.rsvd_strategy_->clone() : nullptr){}
+        : revd_strategy_(other.revd_strategy_ ? other.revd_strategy_->clone() : nullptr){}
+    //copy-assignment
+    REVD& operator=(const REVD other){
+        if (this != &other) {
+            // Create a deep copy of the strategy
+            revd_strategy_ = other.revd_strategy_ ? other.revd_strategy_->clone() : nullptr;
+        }
+        return *this;
+    }
+    //compute method
     void compute(const MatrixType &A, int tr_rank, int max_iter=1e3){
         revd_strategy_->compute(A,tr_rank,max_iter);
         return;

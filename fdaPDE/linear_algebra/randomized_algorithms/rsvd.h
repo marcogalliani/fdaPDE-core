@@ -110,7 +110,7 @@ public:
         return;
     }
     std::unique_ptr<RSVDStrategy<MatrixType>> clone() const override{
-        return std::make_unique<RSI<MatrixType>>(this->seed_,this->tol_);
+        return std::make_unique<RSI<MatrixType>>(*this);
     };
 };
 
@@ -159,7 +159,7 @@ public:
         return;
     }
     std::unique_ptr<RSVDStrategy<MatrixType>> clone() const override{
-        return std::make_unique<GeneralizedRSI<MatrixType>>(this->seed_,this->tol_);
+        return std::make_unique<GeneralizedRSI<MatrixType>>(*this);
     };
 };
 
@@ -209,7 +209,7 @@ public:
         return;
     }
     std::unique_ptr<RSVDStrategy<MatrixType>> clone() const override{
-        return std::make_unique<RBKI<MatrixType>>(this->seed_,this->tol_);
+        return std::make_unique<RBKI<MatrixType>>(*this);
     };
 };
 
@@ -292,7 +292,7 @@ public:
         return;
     }
     std::unique_ptr<RSVDStrategy<MatrixType>> clone() const override{
-        return std::make_unique<GeneralizedRBKI<MatrixType>>(this->seed_,this->tol_);
+        return std::make_unique<GeneralizedRBKI<MatrixType>>(*this);
     };
 };
 
@@ -304,7 +304,14 @@ public:
     explicit RSVD(std::unique_ptr<RSVDStrategy<MatrixType>> &&strategy=std::make_unique<RSI<MatrixType>>()): rsvd_strategy_(std::move(strategy)){}
     RSVD(const RSVD& other)
         : rsvd_strategy_(other.rsvd_strategy_ ? other.rsvd_strategy_->clone() : nullptr){}
-
+    //copy-assignment
+    RSVD& operator=(const RSVD other){
+        if (this != &other) {
+            // Create a deep copy of the strategy
+            rsvd_strategy_ = other.rsvd_strategy_ ? other.rsvd_strategy_->clone() : nullptr;
+        }
+        return *this;
+    }
     void compute(const MatrixType &A, int rank, int max_iter=1e3){
         rsvd_strategy_->compute(A,rank,max_iter);
         return;
