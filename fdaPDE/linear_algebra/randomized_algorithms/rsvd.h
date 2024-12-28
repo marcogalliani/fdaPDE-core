@@ -302,6 +302,7 @@ private:
     std::unique_ptr<RSVDStrategy<MatrixType>> rsvd_strategy_;
 public:
     explicit RSVD(std::unique_ptr<RSVDStrategy<MatrixType>> &&strategy=std::make_unique<RSI<MatrixType>>()): rsvd_strategy_(std::move(strategy)){}
+    //copy-constructor
     RSVD(const RSVD& other)
         : rsvd_strategy_(other.rsvd_strategy_ ? other.rsvd_strategy_->clone() : nullptr){}
     //copy-assignment

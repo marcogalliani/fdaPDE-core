@@ -1,0 +1,90 @@
+---
+title: "Experiments on SVD"
+params:
+  decay: "slow"
+---
+
+## File of params
+```{r}
+library(jsonlite)
+json_data <- fromJSON("params.json")
+
+json_data$TestMatrix$decay <- unbox(params$decay)
+
+json_data$RunParams$truncation_param <- unbox(10)
+json_data$RunParams$seed <- unbox(7050)
+```
+
+
+## Varying the matrix dimension
+Storing the result
+```{r}
+test_size <- c(1000,2000,3000,4000,5000,6000,7000,8000,9000,10000)
+tested_SVDs <- c("rsi","nys_rsi","rbki","nys_rbki","exact")
+```
+
+```{r}
+keys <- c("svd","size")
+
+performance_metrics <- c("exe_time",
+                   "reconstruction_err",
+                   "singVal_err",
+                   "eigVects_err",
+                   "eigVects_angle")
+
+test_results <- 
+   data.frame(matrix(nrow=0,ncol=length(c(keys,performance_metrics))))
+names(test_results) <- c(keys, performance_metrics)
+
+test_results[] <- lapply(test_results, function(x) numeric())
+test_results$svd <- character()
+```
+
+Actual computation
+```{r}
+library(dplyr)
+library(Matrix)
+
+for(matSize in test_size){
+  json_data$TestMatrix$size <- unbox(matSize)
+
+  cat("\nRows:", json_data$TestMatrix$size,"\n")
+  cat("Cols:", json_data$TestMatrix$size,"\n")
+  
+  for(method in tested_SVDs){
+    cat("SVD: ", method,"\n")
+    #setting the method
+    json_data$RunParams$method <- unbox(method)
+    write_json(json_data, "params.json", pretty = TRUE)
+    
+    if(!(matSize >2000 & method=="exact")){
+      #computation
+      system("/Users/marcogalliani/Desktop/fdaPDE-core/cmake-build-default/experiments/new_revd/new_revd
+  ")
+      
+      test_report <- read.csv(file="results/test_report.csv",header=F)
+      
+      #save results
+      test_results <- test_results %>%
+          add_row(svd=method, size=matSize)
+      new_row <- test_results$svd==method & 
+          test_results$size==matSize
+      test_results[new_row, performance_metrics] <- unlist(test_report$V1)
+    }
+  }
+}
+```
+
+# Saving results
+```{r}
+write.csv(format(test_results, digits = 16),
+          paste("past-runs",
+                paste("sdp-test-VSexact",
+                      ".csv",sep=""),
+          sep="/")
+)
+```
+
+
+
+

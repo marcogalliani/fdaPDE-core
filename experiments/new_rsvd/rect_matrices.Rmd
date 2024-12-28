@@ -29,31 +29,39 @@ json_data <- fromJSON("params.json")
 
 json_data$TestMatrix[[variable_dim]] <- unbox(1000)
 json_data$TestMatrix[[fixed_dim]] <- unbox(1000)
+json_data$TestMatrix$decay <- unbox("slow")
 
 json_data$RunParams$truncation_param <- unbox(10)
-
-json_data$RSI$block_size <- unbox(200)
-
-json_data$RBKI$block_size <- unbox(10)
-
 json_data$RunParams$seed <- unbox(7050)
-json_data$RunParams$n_cores <- unbox(1)
 ```
-
-
 
 
 ## Varying the matrix dimension
 Storing the result
 ```{r}
-test_size <- c(1000,2000,3000,4000,5000)
-tested_SVDs <- c("rsi","rbki")
-
-test_results <- data.frame(svd = rep(tested_SVDs, times=length(test_size)),
-              size = rep(test_size, each=length(tested_SVDs)),
-              exeTime = NA, singValErr = NA, l_singVecErr = NA, r_singVecErr = NA
-              )
+test_size <- c(1000,2000,4000,8000,16000)
+tested_SVDs <- c("rsi","ext_rsi","rbki","ext_rbki","exact")
 ```
+
+```{r}
+keys <- c("svd","size")
+
+performance_metrics <- c("exe_time",
+                   "reconstruction_err",
+                   "singVal_err",
+                   "l_singVects_err",
+                   "r_singVects_err",
+                   "l_singVects_angle",
+                   "r_singVects_angle")
+
+test_results <- 
+   data.frame(matrix(nrow=0,ncol=length(c(keys,performance_metrics))))
+names(test_results) <- c(keys, performance_metrics)
+
+test_results[] <- lapply(test_results, function(x) numeric())
+test_results$svd <- character()
+```
+
 
 Actual computation
 ```{r}
@@ -73,24 +81,17 @@ for(matSize in test_size){
     write_json(json_data, "params.json", pretty = TRUE)
     
     #computation
-    system("/Users/marcogalliani/Desktop/fdaPDE-core/cmake-build-default/experiments/test_randSVD/randSVD")
+    system("/Users/marcogalliani/Desktop/fdaPDE-core/cmake-build-default/experiments/new_rsvd/new_rsvd")
     
-    current_exeTime <- read.csv(file="results/exe_times.csv",header=F)[[1]][1]
-    current_SingValErr <- read.csv(file="results/sing_val_err.csv",header=F)[[1]][1]
+    test_report <- read.csv(file="results/test_report.csv",header=F)
     
-    current_l_SingVecErr <- as.vector(readMM(file="results/l_sing_vecs_err.mtx"))
-    current_r_SingVecErr <- as.vector(readMM(file="results/r_sing_vecs_err.mtx"))
-    
+    #save results
     test_results <- test_results %>%
-        mutate(
-          exeTime = ifelse(svd==method & size==matSize, current_exeTime, exeTime),
-          singValErr = ifelse(svd==method & size==matSize, 
-                              current_SingValErr, singValErr),
-          l_singVecErr =  ifelse(svd==method & size==matSize, 
-                                 max(current_l_SingVecErr), l_singVecErr),
-          r_singVecErr = ifelse(svd==method & size==matSize, 
-                                 max(current_r_SingVecErr), r_singVecErr),
-        )
+        add_row(svd=method, size=matSize)
+    new_row <- test_results$svd==method & 
+        test_results$size==matSize
+    test_results[new_row, performance_metrics] <- unlist(test_report$V1)
+      
   }
 }
 ```

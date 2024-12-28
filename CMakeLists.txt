@@ -3,14 +3,11 @@ project(fdaPDE-core)
 
 add_subdirectory(test/)
 
-add_subdirectory(experiments/test_randEVD/)
-add_subdirectory(experiments/test_randSVD/)
-
 add_subdirectory(experiments/new_rsvd/)
 add_subdirectory(experiments/new_revd/)
 add_subdirectory(experiments/rpchol/)
 add_subdirectory(experiments/python_interface/)
-
+add_subdirectory(experiments/noisy-test/)
 
 
 

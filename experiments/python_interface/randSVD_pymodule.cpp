@@ -19,23 +19,6 @@ using fdapde::core::GeneralizedRBKI;
 using fdapde::core::NysRSI;
 using fdapde::core::NysRBKI;
 
-template<typename MatrixType>
-class PyRSVD : public RSVDStrategy<MatrixType> {
-public:
-    /* Inherit the constructors */
-    using RSVDStrategy<MatrixType>::RSVDStrategy;
-
-    /* Trampoline (need one for each virtual function) */
-    void compute(const MatrixType &A, int rank, int max_iter) override{
-        PYBIND11_OVERRIDE_PURE(
-            void, /* Return type */
-            RSVDStrategy<MatrixType>,      /* Parent class */
-            compute,          /* Name of function in C++ (must match Python name) */
-            A, rank, max_iter      /* Argument(s) */
-        );
-    }
-};
-
 PYBIND11_MODULE(randSVD,m){
     using d_RSVD = RSVDStrategy<DMatrix<double>>;
     py::class_<d_RSVD>(m, "RSVD")

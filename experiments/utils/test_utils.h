@@ -7,6 +7,7 @@
 
 #include "utils/symbols.h"
 #include <Eigen/QR>
+#include <Eigen/SVD>
 
 namespace test_utils{
 
@@ -38,6 +39,25 @@ struct TestEVD{
     DMatrix<double> matrixU() const{ return U_;}
     DVector<double> eigenValues() const{ return EigenVals_;}
 };
+
+double subspace(DMatrix<double> A , DMatrix<double> B){
+    Eigen::HouseholderQR<DMatrix<double>> qr;
+
+    qr.compute(A);
+    A = qr.householderQ() * DMatrix<double>::Identity(A.rows(),A.cols());
+    qr.compute(B);
+    B = qr.householderQ() * DMatrix<double>::Identity(B.rows(),B.cols());
+
+    //assuming they have equal rows and B.cols() > A.cols()
+    for(int k = 0; k < A.cols();k++){
+        B = B - A.col(k)*A.col(k).transpose()*B;
+    }
+    Eigen::JacobiSVD<DMatrix<double>> svd;
+    svd.compute(B,Eigen::ComputeThinU | Eigen::ComputeThinV);
+
+    return std::asin(std::min(1.0,svd.singularValues().minCoeff()));
+}
+
 
 
 }
