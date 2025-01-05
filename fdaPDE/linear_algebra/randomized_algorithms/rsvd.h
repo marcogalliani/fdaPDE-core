@@ -91,8 +91,7 @@ public:
         Eigen::JacobiSVD<DMatrix<double>> svd(B.transpose(), Eigen::ComputeThinU | Eigen::ComputeThinV);
         DMatrix<double> E = A*svd.matrixV().leftCols(rank)-Q*svd.matrixU().leftCols(rank)*svd.singularValues().head(rank).asDiagonal();
         double res_err = E.colwise().template lpNorm<2>().maxCoeff();
-        double norm_A = A.norm();
-        for(int i=0; res_err>this->tol_*norm_A && i< max_iter; i++){
+        for(int i=0; res_err>this->tol_ && i< max_iter; i++){
             qr.compute(B);
             Q = qr.householderQ()*DMatrix<double>::Identity(A.cols(), block_sz);
             B = A*Q;
@@ -132,8 +131,7 @@ public:
         Eigen::JacobiSVD<DMatrix<double>> svd;
         DMatrix<double> E;
         double res_err = this->tol_+1;
-        double norm_A = A.norm();
-        for(int i=0; res_err>this->tol_*norm_A && i< max_iter; i++){
+        for(int i=0; res_err>this->tol_ && i< max_iter; i++){
             if(i%2 == 0){
                 Y = A.transpose() * X;
                 qr.compute(Y);
@@ -189,9 +187,8 @@ public:
         Eigen::JacobiSVD<DMatrix<double>> svd(B.leftCols(block_sz).transpose(), Eigen::ComputeThinU | Eigen::ComputeThinV);
         DMatrix<double> E = A*svd.matrixV().leftCols(std::min(rank,block_sz)) - Q.leftCols(block_sz)*svd.matrixU().leftCols(std::min(rank,block_sz))*svd.singularValues().head(std::min(rank,block_sz)).asDiagonal();
         double res_err = E.colwise().template lpNorm<2>().maxCoeff();
-        double norm_A = A.norm();
         int n_cols_Q = block_sz;
-        for(int i=0; res_err > this->tol_*norm_A && i < max_iter; i++, n_cols_Q+=block_sz){
+        for(int i=0; res_err > this->tol_ && i < max_iter; i++, n_cols_Q+=block_sz){
             //update range matrix
             Q.middleCols((i+1)*block_sz,block_sz) = A*B.middleCols(i*block_sz, block_sz);
             Q.middleCols((i+1)*block_sz,block_sz) = fdapde::internals::BCGS_plus(Q.leftCols((i+1)*block_sz), Q.middleCols((i+1)*block_sz,block_sz)).first;
@@ -244,10 +241,9 @@ public:
         Eigen::JacobiSVD<DMatrix<double>> svd;
         DMatrix<double> E;
         double res_err = this->tol_+1;
-        double norm_A = A.norm();
         int sizeX = block_sz, sizeY = 0;
         int j = 0;
-        for(int i=0; res_err > this->tol_*norm_A && j < max_iter; i++){
+        for(int i=0; res_err > this->tol_ && j < max_iter; i++){
             if(i%2 == 0){
                 j = i/2; //complete iteration index (i: half-iteration index)
                 Y.middleCols(j*block_sz,block_sz) = W.middleCols(j*block_sz,block_sz);

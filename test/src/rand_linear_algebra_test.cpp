@@ -37,7 +37,7 @@ TEST(rand_svd_test, square_test){
     DMatrix<double> A = DMatrix<double>::Random(20,20);
     int tr_rank = 3;
     unsigned int seed = fdapde::random_seed;
-    double tol = 1e-3;
+    double tol = 1e-6;
 
     RSVD<DMatrix<double>> rsi(std::make_unique<RSI<DMatrix<double>>>(seed,tol));
     RSVD<DMatrix<double>> rbki(std::make_unique<RBKI<DMatrix<double>>>(seed,tol));
@@ -127,10 +127,10 @@ TEST(rand_svd_test, rect_test){
     ext_rbki.compute(A,tr_rank);
     jacobi_svd.compute(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
-    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-rsi.singularValues()).template lpNorm<2>() < tol*A.norm());
-    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-rbki.singularValues()).template lpNorm<2>() < tol*A.norm());
-    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-ext_rsi.singularValues()).template lpNorm<2>() < tol*A.norm());
-    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-ext_rbki.singularValues()).template lpNorm<2>() < tol*A.norm());
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-rsi.singularValues()).template lpNorm<2>() < tol);
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-rbki.singularValues()).template lpNorm<2>() < tol);
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-ext_rsi.singularValues()).template lpNorm<2>() < tol);
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-ext_rbki.singularValues()).template lpNorm<2>() < tol);
 
     rsi.compute(A.transpose(),tr_rank);
     rbki.compute(A.transpose(),tr_rank);
@@ -138,17 +138,17 @@ TEST(rand_svd_test, rect_test){
     ext_rbki.compute(A,tr_rank);
     jacobi_svd.compute(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
-    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-rsi.singularValues()).template lpNorm<2>() < tol*A.norm());
-    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-rbki.singularValues()).template lpNorm<2>() < tol*A.norm());
-    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-ext_rsi.singularValues()).template lpNorm<2>() < tol*A.norm());
-    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-ext_rbki.singularValues()).template lpNorm<2>() < tol*A.norm());
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-rsi.singularValues()).template lpNorm<2>() < tol);
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-rbki.singularValues()).template lpNorm<2>() < tol);
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-ext_rsi.singularValues()).template lpNorm<2>() < tol);
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-ext_rbki.singularValues()).template lpNorm<2>() < tol);
 }
 
 TEST(rand_evd_test, full_rank){
     DMatrix<double> A = DMatrix<double>::Random(20,20);
     A = A*A.transpose();
     int tr_rank = 3;
-    unsigned int seed = fdapde::random_seed; double tol = 1e-4;
+    unsigned int seed = fdapde::random_seed; double tol = 1e-6;
 
     REVD<DMatrix<double>> nys_rsi(std::make_unique<NysRSI<DMatrix<double>>>(seed,tol));
     REVD<DMatrix<double>> nys_rbki(std::make_unique<NysRBKI<DMatrix<double>>>(seed,tol));
@@ -164,16 +164,16 @@ TEST(rand_evd_test, full_rank){
     //test the copy-assignment
     REVD<DMatrix<double>> test_copy;
     test_copy = nys_rsi;
-    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-test_copy.eigenValues()).template lpNorm<2>() < tol*A.norm());
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-test_copy.eigenValues()).template lpNorm<2>() < tol);
     test_copy = nys_rbki;
-    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-test_copy.eigenValues()).template lpNorm<2>() < tol*A.norm());
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-test_copy.eigenValues()).template lpNorm<2>() < tol);
 }
 
 TEST(rand_evd_test, rank_deficient){
     DMatrix<double> A = DMatrix<double>::Random(40,20);
     A = A*A.transpose();
     int tr_rank = 3;
-    unsigned int seed = fdapde::random_seed; double tol = 1e-4;
+    unsigned int seed = fdapde::random_seed; double tol = 1e-6;
 
     REVD<DMatrix<double>> nys_rsi(std::make_unique<NysRSI<DMatrix<double>>>(seed,tol));
     REVD<DMatrix<double>> nys_rbki(std::make_unique<NysRBKI<DMatrix<double>>>(seed,tol));
