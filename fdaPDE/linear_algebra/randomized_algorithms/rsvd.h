@@ -82,7 +82,6 @@ public:
         //params init
         int max_rank = std::min(A.rows(),A.cols());
         int block_sz = std::min(2*rank,max_rank); //default setting
-        max_iter = std::min(max_iter, max_rank);
         //Q,B init
         Eigen::HouseholderQR<DMatrix<double>> qr(A*fdapde::internals::GaussianMatrix(A.cols(), block_sz, this->seed_));
         DMatrix<double> Q = qr.householderQ()*DMatrix<double>::Identity(A.rows(),block_sz);
@@ -122,7 +121,6 @@ public:
         //params init
         int max_rank = std::min(A.rows(),A.cols());
         int block_sz = std::min(2*rank,max_rank); //default setting
-        max_iter = std::min(max_iter, max_rank);
         //X,Y init
         Eigen::HouseholderQR<DMatrix<double>> qr(A*fdapde::internals::GaussianMatrix(A.cols(), block_sz, this->seed_));
         DMatrix<double> X = qr.householderQ()*DMatrix<double>::Identity(A.rows(),block_sz);

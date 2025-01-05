@@ -48,7 +48,6 @@ public:
         //params init
         int max_rank = A.rows(); //equal to A.cols()
         int block_sz = std::min(2*rank,max_rank); //default setting
-        max_iter = std::min(max_iter, max_rank);
         double shift = A.diagonal().sum()*std::numeric_limits<double>::epsilon();
         //factor init
         DMatrix<double> Y = fdapde::internals::GaussianMatrix(A.rows(), block_sz, this->seed_);
