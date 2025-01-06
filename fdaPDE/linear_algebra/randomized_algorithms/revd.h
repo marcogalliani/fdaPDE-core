@@ -59,7 +59,7 @@ public:
         DMatrix<double> E;
         double res_err = this->tol_+1;
         //iterations
-        for(int i=0; res_err > this->tol_ && i<max_iter; ++i) {
+        for(int i=0; res_err > this->tol_/std::sqrt(2) && i<max_iter; ++i) {
             qr.compute(Y);
             X = qr.householderQ() * DMatrix<double>::Identity(A.rows(),block_sz);
             Y = A*X;
@@ -110,7 +110,7 @@ public:
         double res_err=this->tol_+1;
         //iterations
         int n_cols_X = block_sz;
-        for(int i=0; i<max_iter && res_err>this->tol_;i++,n_cols_X+=block_sz){
+        for(int i=0; i<max_iter && res_err>this->tol_/std::sqrt(2);i++,n_cols_X+=block_sz){
             X.middleCols((i+1)*block_sz,block_sz) = Y.middleCols(i*block_sz,block_sz) + shift*X.middleCols(i*block_sz,block_sz);
             //blocked column
             DMatrix<double> new_col = DMatrix<double>::Zero(X.rows(),(i+1)*block_sz);
