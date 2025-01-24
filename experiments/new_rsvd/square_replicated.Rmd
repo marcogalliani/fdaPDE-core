@@ -1,46 +1,27 @@
 ---
 title: "Experiments on SVD"
-params:
-  n_cores: 1
-  rows:
-    value: "VAR"
-    input: select
-    choice: [1000,"VAR"]
-  cols:
-    value: 1000
-    input: select
-    choice: [1000,"VAR"]
 ---
 
 ## File of params
 ```{r}
-if(params[["rows"]]=="VAR"){
-  variable_dim <- "rows"
-  fixed_dim <- "cols"
-}else {
-  variable_dim <- "cols"
-  fixed_dim <- "rows"
-}
-```
-
-```{r}
 library(jsonlite)
 json_data <- fromJSON("params.json")
 
-json_data$TestMatrix[[variable_dim]] <- unbox(1000)
-json_data$TestMatrix[[fixed_dim]] <- unbox(1000)
+json_data$TestMatrix$rows <- unbox(1000)
+json_data$TestMatrix$cols <- unbox(1000)
 
 json_data$RunParams$truncation_param <- unbox(10)
-json_data$RunParams$seed <- unbox(7050)
+json_data$RunParams$seed <- unbox(1412)
 json_data$RunParams$epsilon <- unbox(1e-4)
-json_data$RunParams$max_iter <- unbox(20)
+json_data$RunParams$max_iter <- unbox(100)
+
 ```
 
 
 ## Varying the matrix dimension
 Storing the result
 ```{r}
-test_size <- c(1000,2000,4000,8000,16000)
+test_size <- c(1000,2000,4000,8000)
 tested_SVDs <- c("rsi","gen_rsi","rbki","gen_rbki")
 ```
 
@@ -63,20 +44,21 @@ test_results[] <- lapply(test_results, function(x) numeric())
 test_results$svd <- character()
 ```
 
-
 Actual computation
 ```{r}
 library(dplyr)
 library(Matrix)
+library(pracma)
 
 n_replicas <- 1
-for(matSize in test_size){
-  json_data$TestMatrix[[variable_dim]] <- unbox(matSize)
 
-  cat("\nRows:", json_data$TestMatrix$rows,"\n")
-  cat("Cols:", json_data$TestMatrix$cols,"\n")
+for(matSize in test_size){
+  cat("\nSize: ", matSize, "\n")
+  json_data$TestMatrix$rows <- unbox(matSize)
+  json_data$TestMatrix$cols <- unbox(matSize)
   
   for(i in 1:n_replicas){
+    #testing over methods
     for(method in tested_SVDs){
       cat("SVD: ", method,"\n")
       #setting the method
@@ -93,43 +75,42 @@ for(matSize in test_size){
           add_row(svd=method, size=matSize, replica=i)
       new_row <- test_results$svd==method & 
           test_results$size==matSize &
-          test_results$replica == i
+          test_results$replica==i
       test_results[new_row, performance_metrics] <- unlist(test_report$V1)
     }
   }
-  # method <- "exact"
-  # cat("SVD: ", method,"\n")
-  # #setting the method
-  # json_data$RunParams$method <- unbox(method)
-  # write_json(json_data, "params.json", pretty = TRUE)
-  # 
-  # #computation
-  # system("/Users/marcogalliani/Desktop/fdaPDE-core/cmake-build-default/experiments/new_rsvd/new_rsvd")
-  # 
-  # test_report <- read.csv(file="results/test_report.csv",header=F)
-  # 
-  # #save results
-  # test_results <- test_results %>%
-  #     add_row(svd=method, size=matSize, replica=i)
-  # new_row <- test_results$svd==method & 
-  #     test_results$size==matSize &
-  #     test_results$replica == i
-  # test_results[new_row, performance_metrics] <- unlist(test_report$V1)
+  if(matSize < 100){
+    method <- "exact"
+    cat("SVD: ", method,"\n")
+    #setting the method
+    json_data$RunParams$method <- unbox(method)
+    write_json(json_data, "params.json", pretty = TRUE)
+    
+    #computation
+    system("/Users/marcogalliani/Desktop/fdaPDE-core/cmake-build-default/experiments/new_rsvd/new_rsvd")
+    
+    test_report <- read.csv(file="results/test_report.csv",header=F)
+    
+    #save results
+    test_results <- test_results %>%
+        add_row(svd=method, size=matSize, replica=i)
+    new_row <- test_results$svd==method & 
+        test_results$size==matSize &
+        test_results$replica == i
+    test_results[new_row, performance_metrics] <- unlist(test_report$V1) 
+  }
 }
 ```
 
 # Saving results
 ```{r}
-save <- F
-
-if(save){
-  write.csv(format(test_results, digits = 16),
+write.csv(format(test_results, digits = 16),
           paste("past-runs",
-                paste("RandSVD-replicated",
-                      "-rows",params$rows,
-                      "-cols",params$cols,
+                paste("RandSVD-squared-replicated",
                       ".csv",sep=""),
           sep="/")
 )
-}
 ```
+
+
+

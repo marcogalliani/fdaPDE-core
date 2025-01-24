@@ -52,7 +52,7 @@ template<typename MatrixType>
 class RSVDStrategy{
 protected:
     unsigned int seed_=fdapde::random_seed;
-    double tol_=1e-3;
+    double tol_=1e-4;
     //storage of the decomposition
     DMatrix<double> U_,V_;
     DVector<double> Sigma_;
@@ -172,35 +172,45 @@ public:
         }else{
             block_sz = 10;
         }
-        int max_dim = std::ceil((double)std::min(A.rows(), A.cols())/(double)block_sz)*block_sz;
-        max_iter = std::min(max_iter,max_dim/block_sz);
+        //iterations are performed on the smaller dimension of A
+        bool transposed = A.rows() > A.cols();
+        const DMatrix<double> &A_view = transposed ? A.transpose() : A;
+
+        max_iter = std::min(max_iter,(int)std::ceil((double)std::min(A_view.rows(),A_view.cols())/(double)block_sz));
+        int max_dim = (max_iter+1)*block_sz; //maximum dimension of the Krylov subspace
         //Q,B init
-        DMatrix<double> Q(A.rows(), max_dim);
-        Q.leftCols(block_sz) = A*fdapde::internals::GaussianMatrix(A.cols(), block_sz, this->seed_);
+        DMatrix<double> Q(A_view.rows(), max_dim);
+        Q.leftCols(block_sz) = A_view*fdapde::internals::GaussianMatrix(A_view.cols(), block_sz, this->seed_);
         Eigen::HouseholderQR<DMatrix<double>> qr(Q.leftCols(block_sz));
-        Q.leftCols(block_sz) = qr.householderQ()*DMatrix<double>::Identity(A.rows(), block_sz);
-        DMatrix<double> B(A.cols(), max_dim);
-        B.leftCols(block_sz) = A.transpose()*Q.leftCols(block_sz);
+        Q.leftCols(block_sz) = qr.householderQ()*DMatrix<double>::Identity(A_view.rows(), block_sz);
+        DMatrix<double> B(A_view.cols(), max_dim);
+        B.leftCols(block_sz) = A_view.transpose()*Q.leftCols(block_sz);
         //Block Krylov Iterations
         Eigen::JacobiSVD<DMatrix<double>> svd(B.leftCols(block_sz).transpose(), Eigen::ComputeThinU | Eigen::ComputeThinV);
-        DMatrix<double> E = A*svd.matrixV().leftCols(std::min(rank,block_sz)) - Q.leftCols(block_sz)*svd.matrixU().leftCols(std::min(rank,block_sz))*svd.singularValues().head(std::min(rank,block_sz)).asDiagonal();
+        DMatrix<double> E = A_view*svd.matrixV().leftCols(std::min(rank,block_sz)) - Q.leftCols(block_sz)*svd.matrixU().leftCols(std::min(rank,block_sz))*svd.singularValues().head(std::min(rank,block_sz)).asDiagonal();
         double res_err = E.colwise().template lpNorm<2>().maxCoeff();
         int n_cols_Q = block_sz;
         for(int i=0; res_err > this->tol_ && i < max_iter; i++, n_cols_Q+=block_sz){
             //update range matrix
-            Q.middleCols((i+1)*block_sz,block_sz) = A*B.middleCols(i*block_sz, block_sz);
+            Q.middleCols((i+1)*block_sz,block_sz) = A_view*B.middleCols(i*block_sz, block_sz);
             Q.middleCols((i+1)*block_sz,block_sz) = fdapde::internals::BCGS_plus(Q.leftCols((i+1)*block_sz), Q.middleCols((i+1)*block_sz,block_sz)).first;
             //update residual matrix
-            B.middleCols((i+1)*block_sz,block_sz) = A.transpose()*Q.middleCols((i+1)*block_sz,block_sz);
+            B.middleCols((i+1)*block_sz,block_sz) = A_view.transpose()*Q.middleCols((i+1)*block_sz,block_sz);
             //update the error
             svd.compute(B.leftCols((i+2)*block_sz).transpose(), Eigen::ComputeThinU | Eigen::ComputeThinV);
-            E = A*svd.matrixV().leftCols(std::min(rank,(i+2)*block_sz)) - Q.leftCols((i+2)*block_sz)*svd.matrixU().leftCols(std::min(rank,(i+2)*block_sz))*svd.singularValues().head(std::min(rank,(i+2)*block_sz)).asDiagonal();
+            E = A_view*svd.matrixV().leftCols(std::min(rank,(i+2)*block_sz)) - Q.leftCols((i+2)*block_sz)*svd.matrixU().leftCols(std::min(rank,(i+2)*block_sz))*svd.singularValues().head(std::min(rank,(i+2)*block_sz)).asDiagonal();
             res_err = E.colwise().template lpNorm<2>().maxCoeff();
         }
         rank = std::min((int)svd.singularValues().size(), rank);
-        this->U_ = Q.leftCols(n_cols_Q)*svd.matrixU().leftCols(rank);
-        this->V_ = svd.matrixV().leftCols(rank);
+
         this->Sigma_ = svd.singularValues().head(rank);
+        if(transposed){
+            this->U_ = svd.matrixV().leftCols(rank);
+            this->V_ = Q.leftCols(n_cols_Q)*svd.matrixU().leftCols(rank);
+        }else{
+            this->U_ = Q.leftCols(n_cols_Q)*svd.matrixU().leftCols(rank);
+            this->V_ = svd.matrixV().leftCols(rank);
+        }
         return;
     }
     std::unique_ptr<RSVDStrategy<MatrixType>> clone() const override{
@@ -221,8 +231,8 @@ public:
         }else{
             block_sz = 10;
         }
-        int max_dim = std::ceil((double)std::min(A.rows(), A.cols())/(double)block_sz)*block_sz;
-        max_iter = std::min(max_iter,max_dim/block_sz);
+        max_iter = std::min(max_iter,(int)std::ceil((double)std::min(A.rows(),A.cols())/(double)block_sz));
+        int max_dim = (max_iter+1)*block_sz; //maximum dimension of the Krylov subspace
 
         //Initialising matrices
         DMatrix<double > X(A.rows(),max_dim), Z(A.rows(),max_dim);
@@ -307,7 +317,7 @@ public:
         }
         return *this;
     }
-    void compute(const MatrixType &A, int rank, int max_iter=1e3){
+    void compute(const MatrixType &A, int rank, int max_iter=50){
         rsvd_strategy_->compute(A,rank,max_iter);
         return;
     }

@@ -4,7 +4,7 @@ title: "Plotting the results"
 
 ## File
 ```{r}
-file_name <- paste("sdp-test-VSexact",
+file_name <- paste("sdp-replicated-test",
                     ".csv",sep="")
 
 
@@ -12,7 +12,8 @@ library(readr)
 test_results <- read_csv(paste("past-runs",file_name,sep="/"),
                          col_types = cols(...1 = col_skip()))
 
-test_results[["svd"]] <- as.factor(test_results[["svd"]])
+test_results[["svd"]] <- factor(test_results[["svd"]],
+                                levels = c("rsi","rbki","nys_rsi","nys_rbki","exact"))
 ```
 
 ```{r}
@@ -28,14 +29,20 @@ library(grid)
 library(gridExtra) 
 library(ggplot2)
 
-col_palette <- palette.colors(n=6, palette = "R4")
+col_palette <- palette.colors(n=15, palette = "R4")
+show_col(col_palette)
+```
+
+
+```{r}
+
 color_map <- c(
-  "rsi" = col_palette[2],
-  "rbki" = col_palette[3],
-  "nys_rsi" = col_palette[4],
-  "nys_rbki" = col_palette[5],
-  "exact" = col_palette[6]
+  "rsi" = "#DF536B",
+  "rbki" = "#61D04F",
+  "nys_rsi" = "#F5C710",
+  "nys_rbki" = "#A020F0"
 )
+
 
 dummy_plot <- 
   ggplot(data.frame(x = 1:length(color_map), y=1:length(color_map),
@@ -65,12 +72,11 @@ ggsave(paste(plot_dir,"legend-sdp-test",
 source("../r-utils/plot_utils.R")
 
 exeTimes.plt <- grouped_lineplot(test_results,
-                 "Execution time [s]",
                  "size", "exe_time",
                  group_name = "svd", color_map,
-                 log.x=F,log.y=T,
-                 complexity.lines=c(1/4,1/2,1,2,3)
-                 )
+                 log.x=T,log.y=T,
+                 complexity.lines=c(1,2,3,4)
+                 ) + theme(text = element_text(size=20))
 
 print(exeTimes.plt)
 
@@ -80,82 +86,35 @@ ggsave(paste(plot_dir,
              ".pdf", sep=""), 
        exeTimes.plt, width = 10, height = 5)
 ```
-- only randomized
-```{r}
-rand_test <- subset(test_results, svd!="exact")
-```
 
 ### Accuracy
 ```{r}
-eigVal_err.plot <- grouped_lineplot(rand_test,
-                 "Eigen value error",
-                 "size", "singVal_err",
-                 group_name = "svd", color_map,
-                 log.y = T
-                 ) 
-print(eigVal_err.plot)
+rand_test <- subset(test_results, svd!="exact")
 
-ggsave(paste(plot_dir,
-             "eigVal_err",
-             "-RandEVD",
-             ".pdf", sep=""), 
-       eigVal_err.plot, width = 10, height = 5)
+rand_test.med_accuracy <- rand_test %>%
+  group_by(svd,size) %>%
+  summarise(
+            reconstruction_err = median(reconstruction_err),
+            singVal_err = median(singVal_err),
+            l_singVects_err = median(l_singVects_err),
+            r_singVects_err = median(r_singVects_err)
+            )
+
+rand_test.med_accuracy$svd <- factor(rand_test.med_accuracy$svd,
+                                     levels = c("rsi","rbki","gen_rsi","gen_rbki"))
+
+rand_test.med_accuracy <- rand_test.med_accuracy[order(rand_test.med_accuracy$size,rand_test.med_accuracy$svd),]
 ```
 
+Export table in latex
 ```{r}
-rec_err.plot <- grouped_lineplot(rand_test,
-                 "Reconstruction error",
-                 "size", "reconstruction_err",
-                 group_name = "svd", color_map,
-                 log.y = T
-                 ) 
+library(kableExtra)
 
-print(rec_err.plot)
-
-ggsave(paste(plot_dir,
-             "reconstruction_err",
-             "-RandEVD",
-             ".pdf", sep=""), 
-       rec_err.plot, width = 10, height = 5)
+what_is <- rand_test.med_accuracy %>%
+  kbl(caption="Accuracy analysis of randomized SVD algorithms on matrices with slow singular values decay",
+      digits = 12,
+      format="latex",
+      col.names = c("svd","size","reconstruction","singVals","l_singVects","r_singVects"),
+      align="r") %>%
+  kable_minimal(full_width = F,  html_font = "Source Sans Pro")
 ```
-
-```{r}
-eigVect_err.plot <- grouped_lineplot(rand_test,
-                 "Error on the eigen vectors",
-                 "size", "eigVects_err",
-                 group_name = "svd", color_map,
-                 log.y = T
-                 ) 
-
-print(eigVect_err.plot)
-
-ggsave(paste(plot_dir,
-             "eigVects_err",
-             "-RandEVD",
-             ".pdf", sep=""), 
-       eigVect_err.plot, width = 10, height = 5)
-
-```
-
-```{r}
-eig_subspace_err.plot <- grouped_lineplot(rand_test,
-                 "Eigen subspace error",
-                 "size", "eigVects_angle",
-                 group_name = "svd", color_map,
-                 log.y = T
-                 ) 
-
-print(eig_subspace_err.plot)
-
-ggsave(paste(plot_dir,
-             "eigSubspace_err",
-             "-RandEVD",
-             ".pdf", sep=""), 
-       eig_subspace_err.plot, width = 10, height = 5)
-```
-
-
-
-
-
-

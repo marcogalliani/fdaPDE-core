@@ -18,7 +18,7 @@ template<typename MatrixType>
 class REVDStrategy{
 protected:
     unsigned int seed_=fdapde::random_seed;
-    double tol_=1e-3;
+    double tol_=1e-4;
     //storage of the decomposition
     DMatrix<double> U_;
     DVector<double> Lambda_;
@@ -88,19 +88,19 @@ public:
     NysRBKI(unsigned int seed, double tol) : REVDStrategy<MatrixType>(seed,tol){}
     void compute(const MatrixType &A, int rank, int max_iter) override{
         //params init
-        int max_rank = A.rows(); //equal to A.cols()
         int block_sz; //default setting
         if(A.rows()<100){
             block_sz = 1;
         }else{
             block_sz = 10;
         }
-        max_iter = std::min(max_iter,max_rank/block_sz-1);
+        max_iter = std::min(max_iter,(int)std::ceil((double)std::min(A.rows(),A.cols())/(double)block_sz));
+        int max_dim = (max_iter+1)*block_sz; //maximum dimension of the Krylov subspace
         double shift = A.diagonal().sum()*std::numeric_limits<double>::epsilon();
         //factor init
         DMatrix<double> X,Y,S,F;
-        X.resize(A.rows(),max_rank); Y.resize(A.rows(),max_rank);
-        S = DMatrix<double>::Zero(max_rank,max_rank);
+        X.resize(A.rows(),max_dim); Y.resize(A.rows(),max_dim);
+        S = DMatrix<double>::Zero(max_dim,max_dim);
         Eigen::HouseholderQR<DMatrix<double>> qr(fdapde::internals::GaussianMatrix(A.rows(),block_sz,this->seed_));
         X.leftCols(block_sz) = qr.householderQ()*DMatrix<double>::Identity(A.rows(),block_sz);
         Y.leftCols(block_sz) = A*X.leftCols(block_sz);
@@ -160,7 +160,7 @@ public:
         return *this;
     }
     //compute method
-    void compute(const MatrixType &A, int tr_rank, int max_iter=1e3){
+    void compute(const MatrixType &A, int tr_rank, int max_iter=50){
         revd_strategy_->compute(A,tr_rank,max_iter);
         return;
     }

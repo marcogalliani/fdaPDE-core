@@ -22,9 +22,9 @@ struct TestSVD{
         U_ = qr.compute(U_).householderQ() * DMatrix<double>::Identity(U_.rows(),sing_vals.size());
         V_ = qr.compute(V_).householderQ() * DMatrix<double>::Identity(V_.rows(),sing_vals.size());
     }
-    DMatrix<double> matrixU() const{ return U_;}
-    DMatrix<double> matrixV() const{ return V_;}
-    DVector<double> singularValues() const{ return SingVals_;}
+    const DMatrix<double>& matrixU() const{ return U_;}
+    const DMatrix<double>& matrixV() const{ return V_;}
+    const DVector<double>& singularValues() const{ return SingVals_;}
 };
 
 struct TestEVD{
@@ -36,8 +36,8 @@ struct TestEVD{
         U_ = DMatrix<double>::Random(mat_size, eigen_vals.size());
         U_ = qr.compute(U_).householderQ() * DMatrix<double>::Identity(U_.rows(),eigen_vals.size());
     }
-    DMatrix<double> matrixU() const{ return U_;}
-    DVector<double> eigenValues() const{ return EigenVals_;}
+    const DMatrix<double>& matrixU() const{ return U_;}
+    const DVector<double>& eigenValues() const{ return EigenVals_;}
 };
 
 double subspace(DMatrix<double> A , DMatrix<double> B){

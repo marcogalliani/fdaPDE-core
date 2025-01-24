@@ -5,16 +5,21 @@ library(dplyr)
 library(viridis)
 
 grouped_boxplot <- function(test_results, 
-                            title,
                             var_name.x,var_name.y,
                             group_name, color_map,
+                            title = NULL,
                             limits.y=NULL, log.y=F,
                             lines=F, legend=F){
   plot <- ggplot(test_results, aes(x=get(var_name.x), y=get(var_name.y), fill=get(group_name))) + 
     geom_boxplot(outlier.shape = NA) +
     scale_fill_manual(values = color_map) +
     theme_light() +
-    labs(title = title, x=var_name.x, y=var_name.y,fill=group_name) 
+    labs(x=var_name.x, y=var_name.y,fill=group_name) +
+    theme(text = element_text(size=30))
+  
+  if(!is.null(title)){
+    plot <- plot + ggtitle(title)
+  }
     
   #options
   if(lines){
@@ -40,11 +45,11 @@ grouped_boxplot <- function(test_results,
 
 
 grouped_lineplot <- function(test_results, 
-                             title,
                              var_name.x,var_name.y,
                              group_name, color_map,
+                             title = NULL,
                              log.x=F,log.y=F,
-                             complexity.lines=NULL){
+                             complexity.lines=NULL, legend=T){
   test_results.grouped <- test_results %>% 
     group_by(group=get(group_name), x=get(var_name.x)) %>%
     summarize(y = median(get(var_name.y))) %>%
@@ -54,9 +59,9 @@ grouped_lineplot <- function(test_results,
                  aes(x=x, y=y, color=group)) + 
     geom_line() +
     theme_light() +
-    guides(color = "none") +
-    labs(title = title, x=var_name.x, y=var_name.y) +
-    scale_color_manual(values=color_map)
+    labs(title = title, x=var_name.x, y=var_name.y, color=group_name) +
+    scale_color_manual(values=color_map) +
+    theme(text = element_text(size=20))
   
   if(log.x){
     plot <- plot + scale_x_log10()
@@ -77,8 +82,11 @@ grouped_lineplot <- function(test_results,
                               x = label_x, 
                               y = label_y, 
                               label = paste(var_name.x, line, sep = "^"), 
-                              hjust = -0.1, color = "grey", size = 3)
+                              hjust = -0.5, color = "grey", size = 5)
     }
+  }
+  if(!legend){
+    plot <- plot + guides(color="none")  
   }
   return(plot)
 }
@@ -104,6 +112,30 @@ stacked_barplot <- function(test_results,
     facet_wrap(~ get(group_name), scales = "free_x") +
     theme_light() + theme(legend.position = "none")
 }
+
+grouped_barplot <- function(test_results, 
+                            var_name.x, var_name.y,
+                            group_name,
+                            title,
+                            log.y = T){
+  
+  test_results.extended <- tidyr::pivot_longer(test_results, cols = c(var_name.part1, var_name.part2),
+                                               names_to = "type", values_to = "composition")
+  
+  ggplot(test_results.extended, aes(x = get(var_name.x), y = composition, fill = type)) +
+    geom_bar(stat = "identity", position = "fill") +  # 'fill' makes it a percentage plot
+    scale_y_continuous(labels = scales::percent) +    # Show percentages on y-axis
+    labs(
+      x = var_name.x,
+      y = paste("%",var_name.part1,sep=""),
+      fill = "composition",
+      title = title
+    ) +
+    facet_wrap(~ get(group_name), scales = "free_x") +
+    theme_light() + theme(legend.position = "none")
+}
+
+
 
 
 

@@ -20,9 +20,9 @@ library(gridExtra)
 
 col_palette <- palette.colors(n=5, palette = "R4")
 color_map <- c(
-  "scikit-learn" = col_palette[2],
-  "rsi" = col_palette[3],
-  "rbki" = col_palette[4]
+  "scikit-learn" = "darkblue",
+  "rsi" = "#DF536B",
+  "rbki" = "#61D04F"
 )
 
 show_col(color_map)
@@ -55,10 +55,11 @@ ggsave(paste("plots/legend-RSVD-VS-scikit",
 ### Times
 ```{r}
 exe_time.plot <- grouped_lineplot(test_results,
-                 "Execution time [s]",
+                 title = "Execution time [s]",
                  "size", "execution_time",
                  group_name = "svd", color_map,
-                 log.y = T
+                 log.x = T, log.y = T,
+                 legend = F
                  )
 
 print(exe_time.plot)
@@ -72,35 +73,20 @@ ggsave(paste("plots/",
 
 
 ### Accuracy
-```{r}
-rec_err.plot <- grouped_lineplot(test_results,
-                 "Reconstruction error",
-                 "size", "rec_error",
-                 group_name = "svd", color_map,
-                 log.y = T
-                 ) 
 
-print(rec_err.plot)
-
-ggsave(paste("plots/",
-             "reconstruction_err",
-             "-RSVD",
-             ".pdf", sep=""), 
-       rec_err.plot, width = 10, height = 5)
-```
 
 ```{r}
 sing_val_err.plot <- grouped_lineplot(test_results,
-                 "Singular values error",
+                 title = "Singular values error",
                  "size", "sing_val_error",
                  group_name = "svd", color_map,
-                 log.y = T
+                 log.y = T, legend = F
                  ) 
 
 print(sing_val_err.plot)
 
 ggsave(paste("plots/",
-             "eig_val_err",
+             "sing_val_err",
              "-RSVD",
              ".pdf", sep=""), 
        sing_val_err.plot, width = 10, height = 5)
@@ -108,10 +94,10 @@ ggsave(paste("plots/",
 
 ```{r}
 l_sing_vect_err.plot <- grouped_lineplot(test_results,
-                 "Singular vectors error",
+                 title = "Left ingular vectors error",
                  "size", "l_sing_vect_error",
                  group_name = "svd", color_map,
-                 log.y = T
+                 log.y = T, legend = F
                  ) 
 
 print(l_sing_vect_err.plot)
@@ -125,10 +111,10 @@ ggsave(paste("plots/",
 
 ```{r}
 r_sing_vect_err.plot <- grouped_lineplot(test_results,
-                 "Singular vectors error",
+                 title = "Right singular vectors error",
                  "size", "r_sing_vect_error",
                  group_name = "svd", color_map,
-                 log.y = T
+                 log.y = T, legend = F
                  ) 
 
 print(r_sing_vect_err.plot)

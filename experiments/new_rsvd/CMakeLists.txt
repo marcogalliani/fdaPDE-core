@@ -27,7 +27,5 @@ else()
     set(CMAKE_CXX_FLAGS "-std=c++20 -O3 ${CMAKE_CXX_FLAGS} ${CMAKE_WARNINGS_FLAGS} -I${CMAKE_CURRENT_SOURCE_DIR}/ -I${CMAKE_CURRENT_SOURCE_DIR}/fdaPDE-core/ -I${json_SOURCE_DIR}/include/")
 endif()
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-
 add_executable(new_rsvd main.cpp)
 target_link_libraries (new_rsvd Eigen3::Eigen)

@@ -11,18 +11,19 @@ json_data <- fromJSON("params.json")
 
 json_data$TestMatrix$rows <- unbox(1000)
 json_data$TestMatrix$cols <- unbox(1000)
-json_data$TestMatrix$decay <- unbox("slow")
 
 json_data$RunParams$truncation_param <- unbox(10)
-json_data$RunParams$seed <- unbox(7050)
+json_data$RunParams$seed <- unbox(1412)
+json_data$RunParams$epsilon <- unbox(1e-4)
+json_data$RunParams$max_iter <- unbox(100)
 ```
 
 
 ## Varying the matrix dimension
 Storing the result
 ```{r}
-test_size <- c(1000,2000,3000,4000,5000)
-tested_SVDs <- c("rsi","ext_rsi","rbki","ext_rbki","exact")
+test_size <- c(1000,2000,4000,8000)
+tested_SVDs <- c("rsi","ext_rsi","rbki","ext_rbki")#,"exact")
 ```
 
 ```{r}
@@ -48,14 +49,15 @@ Actual computation
 ```{r}
 library(dplyr)
 library(Matrix)
+library(pracma)
 
 for(matSize in test_size){
+  cat("\nSize: ", matSize, "\n")
+  
   json_data$TestMatrix$rows <- unbox(matSize)
   json_data$TestMatrix$cols <- unbox(matSize)
-
-  cat("\nRows:", json_data$TestMatrix$rows,"\n")
-  cat("Cols:", json_data$TestMatrix$cols,"\n")
   
+  #testing over methods
   for(method in tested_SVDs){
     cat("SVD: ", method,"\n")
     #setting the method
@@ -77,6 +79,7 @@ for(matSize in test_size){
     }
   }
 }
+file.remove(list.files(path = "data", full.names = TRUE))
 ```
 
 # Saving results
@@ -87,122 +90,6 @@ write.csv(format(test_results, digits = 16),
                       ".csv",sep=""),
           sep="/")
 )
-```
-
-## Visualization
-```{r}
-source("plot_utils.R")
-
-library(readr)
-test_results <- read_csv("past-runs/RandSVD-squared.csv",
-                         col_types = cols(...1 = col_skip()))
-
-test_results[["svd"]] <- as.factor(test_results[["svd"]])
-
-
-col_palette <- hue_pal()(5)
-color_map <- c(
-  "exact" = col_palette[1],
-  "rsi" = col_palette[2],
-  "rbki" = col_palette[4]
-)
-
-dummy_plot <- 
-  ggplot(data.frame(x = 1:length(color_map), y=1:length(color_map),
-                  method=names(color_map)), 
-       aes(x = x, y = y, color = method)) +
-  geom_point(size = 5) +  # Use points just for the purpose of displaying the legend
-  scale_color_manual(values = color_map) +  # Use the custom color mapping
-  theme_void() +                            # Remove axes and background
-  labs(color = "Method")
-
-
-legend <- cowplot::get_legend(dummy_plot)
-grid.newpage()
-grid.draw(legend)
-
-legend_grob <- grid.grabExpr(grid.draw(legend))
-
-ggsave(paste("plots/legend-RandSVD-square",
-             ".pdf", sep=""), 
-       legend_grob, width = 2, height = 2)
-```
-
-### Execution times
-```{r}
-exeTimes.plt <- 
-  grouped_lineplot(mutate(test_results,size = size^2),
-                   "Test on square matrices",
-                   "size", "exeTime",
-                   group_name = "svd", color_map,
-                   log.x=T,log.y=T,
-                   complexity.lines=c(1/2,1,2)
-                   )
-
-ggsave(paste("plots/exeTime-RandSVD-square",
-             ".pdf", sep=""), 
-       exeTimes.plt, width = 10, height = 5)
-```
-
-### Accuracy analysis
-```{r}
-singValErr.plt <- 
-  grouped_lineplot(mutate(test_results,size = size^2),
-                   "Test on square matrices",
-                   "size", "singValErr",
-                   group_name = "svd", color_map,
-                   log.x = T
-                   )
-
-ggsave(paste("plots/singValErr-RandSVD-square",
-             ".pdf", sep=""), 
-       singValErr.plt, width = 10, height = 5)
-```
-
-```{r}
-l_singVectErr.plt <- 
-  grouped_lineplot(mutate(test_results,size = size^2),
-                   "Test on square matrices",
-                   "size", "l_singVecErr",
-                   group_name = "svd", color_map,
-                   log.x = T
-                   )
-
-ggsave(paste("plots/l_singVecErr-RandSVD-square",
-             ".pdf", sep=""), 
-       l_singVectErr.plt, width = 10, height = 5)
-```
-
-```{r}
-r_singVectErr.plt <- 
-  grouped_lineplot(mutate(test_results,size = size^2),
-                   "Test on square matrices",
-                   "size", "r_singVecErr",
-                   group_name = "svd", color_map,
-                   log.x = T
-                   )
-
-ggsave(paste("plots/r_singVecErr-RandSVD-square",
-             ".pdf", sep=""), 
-       r_singVectErr.plt, width = 10, height = 5)
-```
-
-
-### Singular values decay
-```{r}
-sing_val.plot <- 
-  ggplot(with(test_results,
-            data.frame(x = seq(1, max(size), by = 10), 
-                       y = 1/log(seq(1, max(size), by = 10)^2+2))),
-       aes(x=x,y=y,col = "red")) +
-  geom_line() +
-  theme_light() +
-  theme(legend.position = "none") +
-  labs(x = "index i", y = "sing_val s_i")
-
-ggsave(paste("plots/slow_decay_singVal",
-             ".pdf", sep=""), 
-       sing_val.plot, width = 10, height = 5)
 ```
 
 
