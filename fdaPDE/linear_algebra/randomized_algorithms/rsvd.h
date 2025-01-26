@@ -165,17 +165,16 @@ public:
     RBKI()=default;
     RBKI(unsigned int seed, double tol) : RSVDStrategy<MatrixType>(seed,tol){}
     void compute(const MatrixType &A, int rank, int max_iter) override{
+        //iterations are performed on the smaller dimension of A
+        bool transposed = A.rows() > A.cols();
+        const DMatrix<double> &A_view = transposed ? A.transpose() : A;
         //params init
         int block_sz; //default setting for RBKI
-        if(A.rows()<=100){
+        if(A_view.rows()<=100){
             block_sz = 1;
         }else{
             block_sz = 10;
         }
-        //iterations are performed on the smaller dimension of A
-        bool transposed = A.rows() > A.cols();
-        const DMatrix<double> &A_view = transposed ? A.transpose() : A;
-
         max_iter = std::min(max_iter,(int)std::ceil((double)std::min(A_view.rows(),A_view.cols())/(double)block_sz));
         int max_dim = (max_iter+1)*block_sz; //maximum dimension of the Krylov subspace
         //Q,B init
