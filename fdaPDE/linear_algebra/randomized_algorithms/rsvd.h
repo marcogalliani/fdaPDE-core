@@ -51,19 +51,24 @@ namespace core{
 template<typename MatrixType>
 class RSVDStrategy{
 protected:
+    double tolerance_=1e-5;
+    int max_iter_=50;
     unsigned int seed_=fdapde::random_seed;
-    double tol_=1e-4;
     //storage of the decomposition
     DMatrix<double> U_,V_;
     DVector<double> Sigma_;
 public:
     RSVDStrategy()=default;
-    RSVDStrategy(unsigned int seed, double tol) : seed_(seed), tol_(tol){}
-    virtual void compute(const MatrixType &A, int rank, int max_iter) = 0;
+    RSVDStrategy(double tol, int max_iter, unsigned int seed) :  tolerance_(tol), max_iter_(max_iter), seed_(seed){}
+    //compute methods
+    virtual void compute(const MatrixType &A, int rank) = 0;
+    virtual void compute(const MatrixType &A, int rank, int block_sz) = 0;
+    //utility to perform deep copies
     virtual std::unique_ptr<RSVDStrategy<MatrixType>> clone() const = 0;
     //setter
-    void setTol(double tol){ tol_=tol;}
-    void setSeed(unsigned int seed){ seed_=seed;}
+    void set_tolerance(double tol){ tolerance_=tol;}
+    void set_max_iter(int max_iter){ max_iter_=max_iter;}
+    void set_seed(unsigned int seed){ seed_=seed;}
     //getters
     int rank() const{ return Sigma_.size();}
     DMatrix<double> matrixU() const{ return U_;}
@@ -77,11 +82,15 @@ template<typename MatrixType>
 class RSI : public RSVDStrategy<MatrixType>{
 public:
     RSI()=default;
-    RSI(unsigned int seed, double tol) : RSVDStrategy<MatrixType>(seed,tol){}
-    void compute(const MatrixType &A, int rank, int max_iter) override{
+    RSI(double tol, int max_iter, unsigned int seed) : RSVDStrategy<MatrixType>(tol,max_iter,seed){}
+    void compute(const MatrixType &A, int rank) override{
         //params init
         int max_rank = std::min(A.rows(),A.cols());
         int block_sz = std::min(2*rank,max_rank); //default setting
+        //call to the actual implementation
+        compute(A,rank,block_sz);
+    }
+    void compute(const MatrixType &A, int rank, int block_sz) override{
         //Q,B init
         Eigen::HouseholderQR<DMatrix<double>> qr(A*fdapde::internals::GaussianMatrix(A.cols(), block_sz, this->seed_));
         DMatrix<double> Q = qr.householderQ()*DMatrix<double>::Identity(A.rows(),block_sz);
@@ -90,7 +99,7 @@ public:
         Eigen::JacobiSVD<DMatrix<double>> svd(B.transpose(), Eigen::ComputeThinU | Eigen::ComputeThinV);
         DMatrix<double> E = A*svd.matrixV().leftCols(rank)-Q*svd.matrixU().leftCols(rank)*svd.singularValues().head(rank).asDiagonal();
         double res_err = E.colwise().template lpNorm<2>().maxCoeff();
-        for(int i=0; res_err>this->tol_ && i< max_iter; i++){
+        for(int i=0; res_err>this->tolerance_ && i< this->max_iter_; i++){
             qr.compute(B);
             Q = qr.householderQ()*DMatrix<double>::Identity(A.cols(), block_sz);
             B = A*Q;
@@ -116,11 +125,15 @@ template<typename MatrixType>
 class GeneralizedRSI : public RSVDStrategy<MatrixType>{
 public:
     GeneralizedRSI()=default;
-    GeneralizedRSI(unsigned int seed, double tol) : RSVDStrategy<MatrixType>(seed,tol){}
-    void compute(const MatrixType &A, int rank, int max_iter) override{
+    GeneralizedRSI(double tol, int max_iter, unsigned int seed) : RSVDStrategy<MatrixType>(tol,max_iter,seed){}
+    void compute(const MatrixType &A, int rank) override{
         //params init
         int max_rank = std::min(A.rows(),A.cols());
         int block_sz = std::min(2*rank,max_rank); //default setting
+        //call to the actual implementation
+        compute(A,rank,block_sz);
+    }
+    void compute(const MatrixType &A, int rank, int block_sz) override{
         //X,Y init
         Eigen::HouseholderQR<DMatrix<double>> qr(A*fdapde::internals::GaussianMatrix(A.cols(), block_sz, this->seed_));
         DMatrix<double> X = qr.householderQ()*DMatrix<double>::Identity(A.rows(),block_sz);
@@ -128,8 +141,8 @@ public:
         //Subspace Iterations
         Eigen::JacobiSVD<DMatrix<double>> svd;
         DMatrix<double> E;
-        double res_err = this->tol_+1;
-        for(int i=0; res_err>this->tol_ && i< max_iter; i++){
+        double res_err = this->tolerance_+1;
+        for(int i=0; res_err>this->tolerance_ && i< this->max_iter_; i++){
             if(i%2 == 0){
                 Y = A.transpose() * X;
                 qr.compute(Y);
@@ -163,19 +176,21 @@ template<typename MatrixType>
 class RBKI : public RSVDStrategy<MatrixType>{
 public:
     RBKI()=default;
-    RBKI(unsigned int seed, double tol) : RSVDStrategy<MatrixType>(seed,tol){}
-    void compute(const MatrixType &A, int rank, int max_iter) override{
+    RBKI(double tol, int max_iter, unsigned int seed) : RSVDStrategy<MatrixType>(tol,max_iter,seed){}
+    void compute(const MatrixType &A, int rank) override{
         //iterations are performed on the smaller dimension of A
         bool transposed = A.rows() > A.cols();
         const DMatrix<double> &A_view = transposed ? A.transpose() : A;
-        //params init
-        int block_sz; //default setting for RBKI
-        if(A_view.rows()<=100){
-            block_sz = 1;
-        }else{
-            block_sz = 10;
-        }
-        max_iter = std::min(max_iter,(int)std::ceil((double)std::min(A_view.rows(),A_view.cols())/(double)block_sz));
+        //default setting for RBKI
+        int block_sz = (A_view.rows()<=100)? 1 : 10;
+        compute(A,rank,block_sz);
+    }
+    void compute(const MatrixType &A, int rank, int block_sz) override{
+        //iterations are performed on the smaller dimension of A
+        bool transposed = A.rows() > A.cols();
+        const DMatrix<double> &A_view = transposed ? A.transpose() : A;
+        //adjust maximum number of iterations a Krylov Subspace maximum dimension
+        int max_iter = std::min(this->max_iter_,(int)std::ceil((double)std::min(A_view.rows(),A_view.cols())/(double)block_sz));
         int max_dim = (max_iter+1)*block_sz; //maximum dimension of the Krylov subspace
         //Q,B init
         DMatrix<double> Q(A_view.rows(), max_dim);
@@ -189,7 +204,7 @@ public:
         DMatrix<double> E = A_view*svd.matrixV().leftCols(std::min(rank,block_sz)) - Q.leftCols(block_sz)*svd.matrixU().leftCols(std::min(rank,block_sz))*svd.singularValues().head(std::min(rank,block_sz)).asDiagonal();
         double res_err = E.colwise().template lpNorm<2>().maxCoeff();
         int n_cols_Q = block_sz;
-        for(int i=0; res_err > this->tol_ && i < max_iter; i++, n_cols_Q+=block_sz){
+        for(int i=0; res_err > this->tolerance_ && i < max_iter; i++, n_cols_Q+=block_sz){
             //update range matrix
             Q.middleCols((i+1)*block_sz,block_sz) = A_view*B.middleCols(i*block_sz, block_sz);
             Q.middleCols((i+1)*block_sz,block_sz) = fdapde::internals::BCGS_plus(Q.leftCols((i+1)*block_sz), Q.middleCols((i+1)*block_sz,block_sz)).first;
@@ -221,18 +236,19 @@ template<typename MatrixType>
 class GeneralizedRBKI : public RSVDStrategy<MatrixType>{
 public:
     GeneralizedRBKI()=default;
-    GeneralizedRBKI(unsigned int seed, double tol) : RSVDStrategy<MatrixType>(seed,tol){}
-    void compute(const MatrixType &A, int rank, int max_iter) override{
-        //params init
-        int block_sz; //default setting for RBKI
-        if(A.rows()<=100){
-            block_sz = 1;
-        }else{
-            block_sz = 10;
-        }
-        max_iter = std::min(max_iter,(int)std::ceil((double)std::min(A.rows(),A.cols())/(double)block_sz));
+    GeneralizedRBKI(double tol, int max_iter, unsigned int seed) : RSVDStrategy<MatrixType>(tol,max_iter,seed){}
+    void compute(const MatrixType &A, int rank) override{
+        //iterations are performed on the smaller dimension of A
+        bool transposed = A.rows() > A.cols();
+        const DMatrix<double> &A_view = transposed ? A.transpose() : A;
+        //default setting for RBKI
+        int block_sz = (A_view.rows()<=100)? 1 : 10;
+        compute(A,rank,block_sz);
+    }
+    void compute(const MatrixType &A, int rank, int block_sz) override{
+        //adjust maximum number of iterations a Krylov Subspace maximum dimension
+        int max_iter = std::min(this->max_iter_,(int)std::ceil((double)std::min(A.rows(),A.cols())/(double)block_sz));
         int max_dim = (max_iter+1)*block_sz; //maximum dimension of the Krylov subspace
-
         //Initialising matrices
         DMatrix<double > X(A.rows(),max_dim), Z(A.rows(),max_dim);
         DMatrix<double> Y(A.cols(),max_dim), W(A.cols(),max_dim);
@@ -243,14 +259,13 @@ public:
         qr.compute(X.leftCols(block_sz));
         X.leftCols(block_sz) = qr.householderQ() * DMatrix<double>::Identity(A.rows(),block_sz);
         W.leftCols(block_sz) = A.transpose() * X.leftCols(block_sz);
-
         //Block Krylov Iterations
         Eigen::JacobiSVD<DMatrix<double>> svd;
         DMatrix<double> E;
-        double res_err = this->tol_+1;
+        double res_err = this->tolerance_+1;
         int sizeX = block_sz, sizeY = 0;
         int j = 0;
-        for(int i=0; res_err > this->tol_ && j < max_iter; i++){
+        for(int i=0; res_err > this->tolerance_ && j < max_iter; i++){
             if(i%2 == 0){
                 j = i/2; //complete iteration index (i: half-iteration index)
                 Y.middleCols(j*block_sz,block_sz) = W.middleCols(j*block_sz,block_sz);
@@ -316,13 +331,19 @@ public:
         }
         return *this;
     }
-    void compute(const MatrixType &A, int rank, int max_iter=50){
-        rsvd_strategy_->compute(A,rank,max_iter);
+    //compute methods
+    void compute(const MatrixType &A, int rank){
+        rsvd_strategy_->compute(A,rank);
+        return;
+    }
+    void compute(const MatrixType &A, int rank, int block_sz){
+        rsvd_strategy_->compute(A,rank,block_sz);
         return;
     }
     //setters
-    void setTol(double tol){ rsvd_strategy_->setTol(tol);}
-    void setSeed(unsigned int seed){ rsvd_strategy_->setSeed(seed);}
+    void set_tolerance(double tol){ rsvd_strategy_->set_tolerance(tol);}
+    void set_max_iter(int max_iter){ rsvd_strategy_->set_max_iter(max_iter);}
+    void set_seed(unsigned int seed){ rsvd_strategy_->set_seed(seed);}
     //getters
     int rank() const{ return rsvd_strategy_->rank();}
     DMatrix<double> matrixU() const{ return rsvd_strategy_->matrixU();}

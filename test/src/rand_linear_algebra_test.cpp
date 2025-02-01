@@ -36,13 +36,16 @@ using fdapde::testing::almost_equal;
 TEST(rand_svd_test, square_test){
     DMatrix<double> A = DMatrix<double>::Random(20,20);
     int tr_rank = 3;
-    unsigned int seed = fdapde::random_seed;
+    //params
     double tol = 1e-6;
+    unsigned int seed = fdapde::random_seed;
+    int max_iter = 20;
 
-    RSVD<DMatrix<double>> rsi(std::make_unique<RSI<DMatrix<double>>>(seed,tol));
-    RSVD<DMatrix<double>> rbki(std::make_unique<RBKI<DMatrix<double>>>(seed,tol));
-    RSVD<DMatrix<double>> ext_rsi(std::make_unique<GeneralizedRSI<DMatrix<double>>>(seed,tol));
-    RSVD<DMatrix<double>> ext_rbki(std::make_unique<GeneralizedRBKI<DMatrix<double>>>(seed,tol));
+
+    RSVD<DMatrix<double>> rsi(std::make_unique<RSI<DMatrix<double>>>(tol,max_iter,seed));
+    RSVD<DMatrix<double>> rbki(std::make_unique<RBKI<DMatrix<double>>>(tol,max_iter,seed));
+    RSVD<DMatrix<double>> ext_rsi(std::make_unique<GeneralizedRSI<DMatrix<double>>>(tol,max_iter,seed));
+    RSVD<DMatrix<double>> ext_rbki(std::make_unique<GeneralizedRBKI<DMatrix<double>>>(tol,max_iter,seed));
     Eigen::JacobiSVD<DMatrix<double>> jacobi_svd;
 
     rsi.compute(A,tr_rank);
@@ -85,13 +88,15 @@ TEST(rand_svd_test, sparse_test){
     A.setFromTriplets(tripletList.begin(),tripletList.end());
 
     int tr_rank = 3;
+    //parameters
+    double tol = 1e-6;
     unsigned int seed = fdapde::random_seed;
-    double tol = 1e-3;
+    int max_iter = 20;
 
-    RSVD<SpMatrix<double>> rsi(std::make_unique<RSI<SpMatrix<double>>>(seed,tol));
-    RSVD<SpMatrix<double>> rbki(std::make_unique<RBKI<SpMatrix<double>>>(seed,tol));
-    RSVD<SpMatrix<double>> ext_rsi(std::make_unique<GeneralizedRSI<SpMatrix<double>>>(seed,tol));
-    RSVD<SpMatrix<double>> ext_rbki(std::make_unique<GeneralizedRBKI<SpMatrix<double>>>(seed,tol));
+    RSVD<DMatrix<double>> rsi(std::make_unique<RSI<DMatrix<double>>>(tol,max_iter,seed));
+    RSVD<DMatrix<double>> rbki(std::make_unique<RBKI<DMatrix<double>>>(tol,max_iter,seed));
+    RSVD<DMatrix<double>> ext_rsi(std::make_unique<GeneralizedRSI<DMatrix<double>>>(tol,max_iter,seed));
+    RSVD<DMatrix<double>> ext_rbki(std::make_unique<GeneralizedRBKI<DMatrix<double>>>(tol,max_iter,seed));
     Eigen::JacobiSVD<DMatrix<double>> jacobi_svd;
 
     rsi.compute(A,tr_rank);
@@ -112,13 +117,15 @@ TEST(rand_svd_test, sparse_test){
 TEST(rand_svd_test, rect_test){
     DMatrix<double> A = DMatrix<double>::Random(20,40);
     int tr_rank = 3;
+    //parameters
+    double tol = 1e-6;
     unsigned int seed = fdapde::random_seed;
-    double tol = 1e-3;
+    int max_iter = 50;
 
-    RSVD<DMatrix<double>> rsi(std::make_unique<RSI<DMatrix<double>>>(seed,tol));
-    RSVD<DMatrix<double>> rbki(std::make_unique<RBKI<DMatrix<double>>>(seed,tol));
-    RSVD<DMatrix<double>> ext_rsi(std::make_unique<GeneralizedRSI<DMatrix<double>>>(seed,tol));
-    RSVD<DMatrix<double>> ext_rbki(std::make_unique<GeneralizedRBKI<DMatrix<double>>>(seed,tol));
+    RSVD<DMatrix<double>> rsi(std::make_unique<RSI<DMatrix<double>>>(tol,max_iter,seed));
+    RSVD<DMatrix<double>> rbki(std::make_unique<RBKI<DMatrix<double>>>(tol,max_iter,seed));
+    RSVD<DMatrix<double>> ext_rsi(std::make_unique<GeneralizedRSI<DMatrix<double>>>(tol,max_iter,seed));
+    RSVD<DMatrix<double>> ext_rbki(std::make_unique<GeneralizedRBKI<DMatrix<double>>>(tol,max_iter,seed));
     Eigen::JacobiSVD<DMatrix<double>> jacobi_svd;
 
     rsi.compute(A,tr_rank);
@@ -148,10 +155,14 @@ TEST(rand_evd_test, full_rank){
     DMatrix<double> A = DMatrix<double>::Random(20,20);
     A = A*A.transpose();
     int tr_rank = 3;
-    unsigned int seed = fdapde::random_seed; double tol = 1e-6;
 
-    REVD<DMatrix<double>> nys_rsi(std::make_unique<NysRSI<DMatrix<double>>>(seed,tol));
-    REVD<DMatrix<double>> nys_rbki(std::make_unique<NysRBKI<DMatrix<double>>>(seed,tol));
+    //params
+    double tol = 1e-6;
+    int max_iter = 100;
+    unsigned int seed = fdapde::random_seed;
+
+    REVD<DMatrix<double>> nys_rsi(std::make_unique<NysRSI<DMatrix<double>>>(tol,max_iter,seed));
+    REVD<DMatrix<double>> nys_rbki(std::make_unique<NysRBKI<DMatrix<double>>>(tol,max_iter,seed));
     Eigen::JacobiSVD<DMatrix<double>> jacobi_svd;
 
     nys_rsi.compute(A,tr_rank);
@@ -173,10 +184,13 @@ TEST(rand_evd_test, rank_deficient){
     DMatrix<double> A = DMatrix<double>::Random(40,20);
     A = A*A.transpose();
     int tr_rank = 3;
-    unsigned int seed = fdapde::random_seed; double tol = 1e-6;
+    //params
+    double tol = 1e-6;
+    int max_iter = 100;
+    unsigned int seed = fdapde::random_seed;
 
-    REVD<DMatrix<double>> nys_rsi(std::make_unique<NysRSI<DMatrix<double>>>(seed,tol));
-    REVD<DMatrix<double>> nys_rbki(std::make_unique<NysRBKI<DMatrix<double>>>(seed,tol));
+    REVD<DMatrix<double>> nys_rsi(std::make_unique<NysRSI<DMatrix<double>>>(tol,max_iter,seed));
+    REVD<DMatrix<double>> nys_rbki(std::make_unique<NysRBKI<DMatrix<double>>>(tol,max_iter,seed));
     Eigen::JacobiSVD<DMatrix<double>> jacobi_svd;
 
     nys_rsi.compute(A,tr_rank);
@@ -200,12 +214,14 @@ TEST(rand_evd_test, sparse_test){
     SpMatrix<double> A(20,20);
     A.setFromTriplets(tripletList.begin(),tripletList.end());
     A = A*A.transpose();
-
     int tr_rank = 3;
-    unsigned int seed = fdapde::random_seed; double tol = 1e-4;
+    //params
+    double tol = 1e-6;
+    int max_iter = 100;
+    unsigned int seed = fdapde::random_seed;
 
-    REVD<SpMatrix<double>> nys_rsi(std::make_unique<NysRSI<SpMatrix<double>>>(seed,tol));
-    REVD<SpMatrix<double>> nys_rbki(std::make_unique<NysRBKI<SpMatrix<double>>>(seed,tol));
+    REVD<DMatrix<double>> nys_rsi(std::make_unique<NysRSI<DMatrix<double>>>(tol,max_iter,seed));
+    REVD<DMatrix<double>> nys_rbki(std::make_unique<NysRBKI<DMatrix<double>>>(tol,max_iter,seed));
     Eigen::JacobiSVD<DMatrix<double>> jacobi_svd;
 
     nys_rsi.compute(A,tr_rank);
