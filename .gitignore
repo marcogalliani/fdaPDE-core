@@ -1,5 +1,6 @@
 *.txt
-!CMakeLists.txt
+CMakeLists.txt
+!test/CMakeLists.txt
 *.json
 *.cmake
 *Makefile
@@ -16,10 +17,11 @@ CMakeFiles/
 .DS_Store
 .bash_history
 .idea/
+
 cmake-build-debug-docker/
 cmake-build-default/
 cmake-build-debug/
-experiments/test_RSVD/performances.csv
+
 .vscode
 
 #plots
@@ -39,3 +41,9 @@ experiments/
 experiments/**/*.csv
 experiments/**/*.mtx
 
+#python interface
+python_interface/results
+python_interface/plots
+python_interface/*.ipynb
+python_interface/*.Rmd
+!python_interface/RSVD_playground.ipynb
