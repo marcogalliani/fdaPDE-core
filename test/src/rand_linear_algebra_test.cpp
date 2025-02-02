@@ -91,7 +91,7 @@ TEST(rand_svd_test, sparse_test){
     //parameters
     double tol = 1e-6;
     unsigned int seed = fdapde::random_seed;
-    int max_iter = 20;
+    int max_iter = 100;
 
     RSVD<DMatrix<double>> rsi(std::make_unique<RSI<DMatrix<double>>>(tol,max_iter,seed));
     RSVD<DMatrix<double>> rbki(std::make_unique<RBKI<DMatrix<double>>>(tol,max_iter,seed));

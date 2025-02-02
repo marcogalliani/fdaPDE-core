@@ -18,6 +18,7 @@ CMakeFiles/
 .bash_history
 .idea/
 
+#clion files
 cmake-build-debug-docker/
 cmake-build-default/
 cmake-build-debug/
