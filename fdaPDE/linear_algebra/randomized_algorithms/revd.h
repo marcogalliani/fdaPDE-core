@@ -37,8 +37,8 @@ public:
     void set_seed(unsigned int seed){ seed_=seed;}
     //getters
     int rank() const{ return Lambda_.size();}
-    DMatrix<double> matrixU() const{ return U_;}
-    DVector<double> eigenValues() const{ return Lambda_;}
+    const DMatrix<double>& matrixU() const{ return U_;}
+    const DVector<double>& eigenValues() const{ return Lambda_;}
     //destructor
     virtual ~REVDStrategy() = default;
 };
@@ -188,8 +188,8 @@ public:
     void set_seed(unsigned int seed){ revd_strategy_->set_seed(seed);}
     //getters
     int rank() const{ return revd_strategy_->rank();}
-    DMatrix<double> matrixU() const{ return revd_strategy_->matrixU();}
-    DVector<double> eigenValues() const{ return revd_strategy_->eigenValues();}
+    const DMatrix<double>& matrixU() const{ return revd_strategy_->matrixU();}
+    const DVector<double>& eigenValues() const{ return revd_strategy_->eigenValues();}
 };
 
 //a trait to detect the usage of randomized evd

@@ -28,7 +28,7 @@ public:
     void setSeed(unsigned int seed){ seed_=seed;}
     //getters
     int rank() const{ return F_.cols();}
-    DMatrix<double> factor() const{ return F_;}
+    const DMatrix<double>& factor() const{ return F_;}
     double shift() const{ return shift_;}
     //destructor
     virtual ~NysApproxStrategy() = default;
@@ -94,7 +94,7 @@ public:
     void setSeed(unsigned int seed){ nys_strategy_->setSeed(seed);}
     //getters
     int rank() const{ return nys_strategy_->rank();}
-    DMatrix<double> factor() const{ return nys_strategy_->factor();}
+    const DMatrix<double>& factor() const{ return nys_strategy_->factor();}
     double shift() const{ return nys_strategy_->shift();}
 };
 

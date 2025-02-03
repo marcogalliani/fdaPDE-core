@@ -71,9 +71,9 @@ public:
     void set_seed(unsigned int seed){ seed_=seed;}
     //getters
     int rank() const{ return Sigma_.size();}
-    DMatrix<double> matrixU() const{ return U_;}
-    DMatrix<double> matrixV() const{ return V_;}
-    DVector<double> singularValues() const{ return Sigma_;}
+    const DMatrix<double>& matrixU() const{ return U_;}
+    const DMatrix<double>& matrixV() const{ return V_;}
+    const DVector<double>& singularValues() const{ return Sigma_;}
     //destructor
     virtual ~RSVDStrategy() = default;
 };
@@ -373,9 +373,9 @@ public:
     void set_seed(unsigned int seed){ rsvd_strategy_->set_seed(seed);}
     //getters
     int rank() const{ return rsvd_strategy_->rank();}
-    DMatrix<double> matrixU() const{ return rsvd_strategy_->matrixU();}
-    DMatrix<double> matrixV() const{ return rsvd_strategy_->matrixV();}
-    DVector<double> singularValues() const{ return rsvd_strategy_->singularValues();}
+    const DMatrix<double>& matrixU() const{ return rsvd_strategy_->matrixU();}
+    const DMatrix<double>& matrixV() const{ return rsvd_strategy_->matrixV();}
+    const DVector<double>& singularValues() const{ return rsvd_strategy_->singularValues();}
 };
 
 //a trait to detect the usage of randomized svd
