@@ -105,8 +105,13 @@ template <int N, typename... GridDimensionsT>
         return get_grid_point(opt_index_);
     }
     //observers
-
 };
+
+    //TO DO:
+    /* - define a wrapper to automatically detect the types of the vectors passed to HillClimbing
+     * - observers
+     * - define grid as an outside class (together with get_grid_point functionality)
+     */
 
 }   // namespace fdapde
 
