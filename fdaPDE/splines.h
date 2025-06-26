@@ -17,26 +17,37 @@
 #ifndef __FDAPDE_SPLINES_MODULE_H__
 #define __FDAPDE_SPLINES_MODULE_H__
 
-#ifndef __FDAPDE_PDE_MODULE_H__
-#define __FDAPDE_PDE_MODULE_H__
+// clang-format off
 
-#include "pde/pde.h"
-#include "pde/differential_operators.h"
-#include "pde/differential_expressions.h"
+// include required modules
+#include "linear_algebra.h"    // pull Eigen first
+#include "utility.h"
+#include "fields.h"
+#include "geometry.h"
 
-#include "utils/integration/integrator.h"
-#include "utils/integration/integrator_tables.h"
+namespace fdapde{
 
-#endif
+struct spline_tag { };
 
-#include "splines/spline_symbols.h"
-#include "splines/spline_assembler.h"
-#include "splines/basis/spline.h"
-#include "splines/basis/spline_basis.h"
-#include "splines/solvers/spline_solver_base.h"
-#include "splines/solvers/spline_solver_selector.h"
-#include "splines/solvers/spline_linear_elliptic_solver.h"
-#include "splines/operators/reaction.h"
-#include "splines/operators/bilaplacian.h"
+}   // namespace fdapde
+
+// dof management logic
+#include "src/splines/dof_handler.h"
+// quadrature rules
+#include "src/splines/sp_integration.h"
+// assembly logic
+#include "src/assembly.h"
+#include "src/splines/sp_assembler_base.h"
+#include "src/splines/sp_bilinear_form_assembler.h"
+#include "src/splines/sp_linear_form_assembler.h"
+// spline spaces
+#include "src/splines/bspline_basis.h"
+#include "src/splines/bs_space.h"
+// weak forms
+#include "src/splines/sp_objects.h"
+// tensor product spaces
+#include "src/tp_space.h"
+
+// clang-format on
 
 #endif   // __FDAPDE_SPLINES_MODULE_H__

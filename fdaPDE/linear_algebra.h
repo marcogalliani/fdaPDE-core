@@ -17,11 +17,60 @@
 #ifndef __FDAPDE_LINEAR_ALGEBRA_MODULE_H__
 #define __FDAPDE_LINEAR_ALGEBRA_MODULE_H__
 
-#include "linear_algebra/binary_matrix.h"
-#include "linear_algebra/kronecker_product.h"
-#include "linear_algebra/smw.h"
-#include "linear_algebra/sparse_block_matrix.h"
-#include "linear_algebra/lumping.h"
+// clang-format off
+
+// include Eigen linear algebra library
+#include <Eigen/Eigen>
+#define __FDAPDE_HAS_EIGEN__
+
+namespace fdapde {
+namespace internals {
+
+// define basic eigen traits
+template <typename XprType> struct is_eigen_dense_xpr {
+    static constexpr bool value =
+        std::is_base_of<Eigen::MatrixBase<std::decay_t<XprType>>, std::decay_t<XprType>>::value;
+};
+template <typename XprType> constexpr bool is_eigen_dense_xpr_v = is_eigen_dense_xpr<XprType>::value;
+template <typename XprType> class is_eigen_dense_vec {
+   private:
+    using XprType_ = std::decay_t<XprType>;
+    static constexpr bool check_() {
+        if constexpr (is_eigen_dense_xpr_v<XprType_>) {
+	    return XprType_::IsVectorAtCompileTime;
+        }
+        return false;
+    }
+   public:
+    static constexpr bool value = check_();
+};
+template <typename XprType> constexpr bool is_eigen_dense_vec_v = is_eigen_dense_vec<XprType>::value;
+
+template <typename XprType> struct is_eigen_sparse_xpr {
+    static constexpr bool value =
+        std::is_base_of_v<Eigen::SparseMatrixBase<std::decay_t<XprType>>, std::decay_t<XprType>>;
+};
+template <typename XprType> constexpr bool is_eigen_sparse_xpr_v = is_eigen_sparse_xpr<XprType>::value;
+
+}   // namespace internals
+}   // namespace fdapde
+
+// include required modules
+#include "utility.h"
+#include "src/linear_algebra/utility.h"
+
+#include "src/linear_algebra/eigen_helper.h"
+#include "src/linear_algebra/fspai.h"
+#include "src/linear_algebra/kronecker.h"
+#include "src/linear_algebra/lumping.h"
+#include "src/linear_algebra/sparse_block_matrix.h"
+#include "src/linear_algebra/woodbury.h"
+// randomized linear algebra
+#include "src/linear_algebra/rsi.h"
+#include "src/linear_algebra/rbki.h"
+#include "src/linear_algebra/rp_chol.h"
+
+// clang-format on
 
 #include "fdaPDE/linear_algebra/randomized_algorithms/rsvd.h"
 #include "fdaPDE/linear_algebra/randomized_algorithms/revd.h"

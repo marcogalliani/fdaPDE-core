@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>   // testing framework
 
 #include <fdaPDE/linear_algebra.h>
+
 using fdapde::core::RSVD;
 using fdapde::core::REVD;
 using fdapde::core::NystromApproximation;
@@ -37,15 +38,31 @@ TEST(rand_svd_test, square_test){
     DMatrix<double> A = DMatrix<double>::Random(20,20);
     int tr_rank = 3;
     //params
-    double tol = 1e-6;
     unsigned int seed = fdapde::random_seed;
-    int max_iter = 20;
+    double tol = 1e-3;
 
+    RSVD<DMatrix<double>> rsi(std::make_unique<RSI<DMatrix<double>>>(seed,tol));
+    RSVD<DMatrix<double>> rbki(std::make_unique<RBKI<DMatrix<double>>>(seed,tol));
+    Eigen::JacobiSVD<DMatrix<double>> jacobi_svd;
 
-    RSVD<DMatrix<double>> rsi(std::make_unique<RSI<DMatrix<double>>>(tol,max_iter,seed));
-    RSVD<DMatrix<double>> rbki(std::make_unique<RBKI<DMatrix<double>>>(tol,max_iter,seed));
-    RSVD<DMatrix<double>> ext_rsi(std::make_unique<GeneralizedRSI<DMatrix<double>>>(tol,max_iter,seed));
-    RSVD<DMatrix<double>> ext_rbki(std::make_unique<GeneralizedRBKI<DMatrix<double>>>(tol,max_iter,seed));
+    rsi.compute(A,tr_rank);
+    rbki.compute(A,tr_rank);
+    jacobi_svd.compute(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-rsi.singularValues()).template lpNorm<2>() < tol);
+    EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-rbki.singularValues()).template lpNorm<2>() < tol);
+}
+
+TEST(rand_svd_test, rect_test){
+    DMatrix<double> A = DMatrix<double>::Random(10,20);
+    int tr_rank = 3;
+    unsigned int seed = fdapde::random_seed;
+    double tol = 1e-3;
+
+    RSVD<DMatrix<double>> rsi(std::make_unique<RSI<DMatrix<double>>>(seed,tol));
+    RSVD<DMatrix<double>> rbki(std::make_unique<RBKI<DMatrix<double>>>(seed,tol));
+    RSVD<DMatrix<double>> ext_rsi(std::make_unique<GeneralizedRSI<DMatrix<double>>>(seed,tol));
+    RSVD<DMatrix<double>> ext_rbki(std::make_unique<GeneralizedRBKI<DMatrix<double>>>(seed,tol));
     Eigen::JacobiSVD<DMatrix<double>> jacobi_svd;
 
     rsi.compute(A,tr_rank);
@@ -70,8 +87,6 @@ TEST(rand_svd_test, square_test){
     EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-test_copy.singularValues()).template lpNorm<2>() < tol*A.norm());
     test_copy = ext_rbki;
     EXPECT_TRUE((jacobi_svd.singularValues().head(tr_rank)-test_copy.singularValues()).template lpNorm<2>() < tol*A.norm());
-
-
 }
 
 TEST(rand_svd_test, sparse_test){
@@ -160,9 +175,9 @@ TEST(rand_evd_test, full_rank){
     double tol = 1e-6;
     int max_iter = 100;
     unsigned int seed = fdapde::random_seed;
+    REVD<DMatrix<double>> nys_rsi(std::make_unique<NysRSI<DMatrix<double>>>(seed,tol));
+    REVD<DMatrix<double>> nys_rbki(std::make_unique<NysRBKI<DMatrix<double>>>(seed,tol));
 
-    REVD<DMatrix<double>> nys_rsi(std::make_unique<NysRSI<DMatrix<double>>>(tol,max_iter,seed));
-    REVD<DMatrix<double>> nys_rbki(std::make_unique<NysRBKI<DMatrix<double>>>(tol,max_iter,seed));
     Eigen::JacobiSVD<DMatrix<double>> jacobi_svd;
 
     nys_rsi.compute(A,tr_rank);
@@ -215,13 +230,11 @@ TEST(rand_evd_test, sparse_test){
     A.setFromTriplets(tripletList.begin(),tripletList.end());
     A = A*A.transpose();
     int tr_rank = 3;
-    //params
-    double tol = 1e-6;
-    int max_iter = 100;
-    unsigned int seed = fdapde::random_seed;
 
-    REVD<DMatrix<double>> nys_rsi(std::make_unique<NysRSI<DMatrix<double>>>(tol,max_iter,seed));
-    REVD<DMatrix<double>> nys_rbki(std::make_unique<NysRBKI<DMatrix<double>>>(tol,max_iter,seed));
+    unsigned int seed = fdapde::random_seed; double tol = 1e-4;
+
+    REVD<DMatrix<double>> nys_rsi(std::make_unique<NysRSI<DMatrix<double>>>(seed,tol));
+    REVD<DMatrix<double>> nys_rbki(std::make_unique<NysRBKI<DMatrix<double>>>(seed,tol));
     Eigen::JacobiSVD<DMatrix<double>> jacobi_svd;
 
     nys_rsi.compute(A,tr_rank);

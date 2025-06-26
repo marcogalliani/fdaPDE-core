@@ -17,17 +17,33 @@
 #ifndef __FDAPDE_GEOMETRY_MODULE_H__
 #define __FDAPDE_GEOMETRY_MODULE_H__
 
-#include "geometry/hyperplane.h"
-#include "geometry/interval.h"
-#include "geometry/kd_tree.h"
-#include "geometry/segment.h"
-#include "geometry/simplex.h"
-#include "geometry/tetrahedron.h"
-#include "geometry/tree_search.h"
-#include "geometry/triangle.h"
-#include "geometry/triangulation.h"
-#include "geometry/utils.h"
-#include "geometry/voronoi.h"
-#include "geometry/walk_search.h"
+// clang-format off
+
+// include required modules
+#include "linear_algebra.h"    // pull Eigen first
+#include "utility.h"
+#include "io.h"
+
+// minimal geometric entites
+#include "src/geometry/utility.h"
+#include "src/geometry/primitives.h"
+#include "src/geometry/hyperplane.h"
+#include "src/geometry/simplex.h"
+#include "src/geometry/segment.h"
+#include "src/geometry/triangle.h"
+#include "src/geometry/tetrahedron.h"
+// algorithms
+#include "src/geometry/kd_tree.h"
+#include "src/geometry/tree_search.h"
+#include "src/geometry/walk_search.h"
+#include "src/geometry/projection.h"
+// data structures
+#include "src/geometry/triangulation.h"
+#include "src/geometry/interval.h"
+#include "src/geometry/linear_network.h"
+#include "src/geometry/dcel.h"
+#include "src/geometry/polygon.h"
+
+// clang-format on
 
 #endif   // __FDAPDE_GEOMETRY_MODULE_H__

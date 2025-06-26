@@ -17,15 +17,28 @@
 #ifndef __FDAPDE_FIELDS_MODULE_H__
 #define __FDAPDE_FIELDS_MODULE_H__
 
-#include "fields/differentiable_field.h"
-#include "fields/dot_product.h"
-#include "fields/field_derivatives.h"
-#include "fields/field_ptrs.h"
-#include "fields/matrix_expressions.h"
-#include "fields/matrix_field.h"
-#include "fields/scalar_expressions.h"
-#include "fields/scalar_field.h"
-#include "fields/vector_expressions.h"
-#include "fields/vector_field.h"
+// clang-format off
+
+// include required modules
+#include "utility.h"
+
+#include "src/fields/xpr_helper.h"
+// import scalar fields logic first, as matrix field will depend on it
+#include "src/fields/scalar_field.h"
+#include "src/fields/divergence.h"
+#include "src/fields/dot.h"
+#include "src/fields/laplacian.h"
+#include "src/fields/norm.h"
+#include "src/fields/space_time_field.h"
+// matrix field logic
+#include "src/fields/jacobian.h"
+#include "src/fields/matrix_field.h"
+#include "src/fields/gradient.h"
+#include "src/fields/hessian.h"
+
+#include "src/fields/polynomial.h"
+#include "src/fields/spline.h"
+
+// clang-format on
 
 #endif   // __FDAPDE_FIELDS_MODULE_H__

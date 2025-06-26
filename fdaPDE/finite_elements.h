@@ -17,31 +17,44 @@
 #ifndef __FDAPDE_FINITE_ELEMENTS_MODULE_H__
 #define __FDAPDE_FINITE_ELEMENTS_MODULE_H__
 
-#ifndef __FDAPDE_PDE_MODULE_H__
-#define __FDAPDE_PDE_MODULE_H__
+// clang-format off
 
-#include "pde/pde.h"
-#include "pde/differential_operators.h"
-#include "pde/differential_expressions.h"
+// include required modules
+#include "linear_algebra.h"    // pull Eigen first
+#include "utility.h"
+#include "fields.h"
+#include "geometry.h"
 
-#include "utils/integration/integrator.h"
-#include "utils/integration/integrator_tables.h"
+namespace fdapde{
 
-#endif
+struct finite_element_tag { };
 
-#include "finite_elements/fem_symbols.h"
-#include "finite_elements/fem_assembler.h"
-#include "finite_elements/basis/multivariate_polynomial.h"
-#include "finite_elements/basis/lagrangian_basis.h"
-#include "finite_elements/basis/reference_element.h"
-#include "finite_elements/solvers/fem_solver_base.h"
-#include "finite_elements/solvers/fem_solver_selector.h"
-#include "finite_elements/solvers/fem_linear_elliptic_solver.h"
-#include "finite_elements/solvers/fem_linear_parabolic_solver.h"
-#include "finite_elements/operators/laplacian.h"
-#include "finite_elements/operators/diffusion.h"
-#include "finite_elements/operators/advection.h"
-#include "finite_elements/operators/reaction.h"
-#include "finite_elements/operators/dt.h"
+}   // namespace fdapde
+
+// dof management logic
+#include "src/finite_elements/dof_segment.h"
+#include "src/finite_elements/dof_tetrahedron.h"
+#include "src/finite_elements/dof_triangle.h"
+#include "src/finite_elements/dof_constraints.h"
+#include "src/finite_elements/dof_handler.h"
+// quadrature rules
+#include "src/finite_elements/fe_integration.h"
+// assembly logic
+#include "src/assembly.h"
+#include "src/finite_elements/fe_assembler_base.h"
+#include "src/finite_elements/fe_bilinear_form_assembler.h"
+#include "src/finite_elements/fe_linear_form_assembler.h"
+#include "src/finite_elements/fe_mass_assembler.h"
+#include "src/finite_elements/fe_evaluator.h"
+// finite element spaces
+#include "src/finite_elements/lagrange_basis.h"
+#include "src/finite_elements/fe_p.h"
+#include "src/finite_elements/fe_space.h"
+// weak forms
+#include "src/finite_elements/fe_objects.h"
+// tensor product spaces
+#include "src/tp_space.h"
+
+// clang-format on
 
 #endif   // __FDAPDE_FINITE_ELEMENTS_MODULE_H__
