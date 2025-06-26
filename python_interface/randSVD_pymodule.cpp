@@ -24,7 +24,11 @@ PYBIND11_MODULE(randSVD,m){
     py::class_<d_RSVD>(m, "RSVD")
         .def("matrixU", &d_RSVD::matrixU)
         .def("matrixV", &d_RSVD::matrixV)
-        .def("singularValues", &d_RSVD::singularValues);
+        .def("singularValues", &d_RSVD::singularValues)
+        .def("set_max_iter", &d_RSVD::set_max_iter)
+        .def("set_tolerance", &d_RSVD::set_tolerance)
+        .def("set_seed", &d_RSVD::set_seed);
+
 
     using d_RSI = RSI<DMatrix<double>>;
     py::class_<d_RSI, d_RSVD>(m, "RSI")
