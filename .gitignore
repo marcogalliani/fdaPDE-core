@@ -41,7 +41,7 @@ cmake-build-debug/
 *.html
 
 #files in the experiments directory
-experiments/
+experiments/**/*.txt
 experiments/**/*.csv
 experiments/**/*.mtx
 

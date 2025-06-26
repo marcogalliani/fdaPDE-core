@@ -30,6 +30,7 @@
 #include "src/optimization/wolfe_line_search.h"
 // algorithms
 #include "src/optimization/grid.h"
+#include "src/optimization/hill_climbing.h"
 #include "src/optimization/newton.h"
 #include "src/optimization/gradient_descent.h"
 #include "src/optimization/bfgs.h"

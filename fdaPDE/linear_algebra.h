@@ -72,8 +72,4 @@ template <typename XprType> constexpr bool is_eigen_sparse_xpr_v = is_eigen_spar
 
 // clang-format on
 
-#include "fdaPDE/linear_algebra/randomized_algorithms/rsvd.h"
-#include "fdaPDE/linear_algebra/randomized_algorithms/revd.h"
-#include "fdaPDE/linear_algebra/randomized_algorithms/nystrom.h"
-
 #endif   // __FDAPDE_LINEAR_ALGEBRA_MODULE_H__
