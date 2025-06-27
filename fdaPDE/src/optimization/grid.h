@@ -36,13 +36,13 @@ template <int N, typename... Args> class GridOptimizer {
     vector_t x_current;
     // constructor
     GridOptimizer() requires(N != Dynamic && sizeof...(Args) != 0) : size_(N) { }
-    GridOptimizer(int size) requires(N == Dynamic && sizeof...(Args) != 0) : size_(size) { }
+    GridOptimizer(int size) requires(N == Dynamic && sizeof...(Args) != 0) : size_(size), x_current(size) { }
     GridOptimizer(Args&&... callbacks)
         requires(N != Dynamic)
         : callbacks_(std::make_tuple(std::forward<Args>(callbacks)...)), size_(N) { }
     GridOptimizer(int size, Args&&... callbacks)
         requires(N == Dynamic)
-        : callbacks_(std::make_tuple(std::forward<Args>(callbacks)...)), size_(size) { }
+        : callbacks_(std::make_tuple(std::forward<Args>(callbacks)...)), size_(size), x_current(size) { }
     // copy semantic
     GridOptimizer(const GridOptimizer& other) : callbacks_(other.callbacks_), size_(other.size_) { }
     GridOptimizer& operator=(const GridOptimizer& other) {

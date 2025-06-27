@@ -20,7 +20,6 @@
 #include "header_check.h"
 
 namespace fdapde {
-
 // searches for the point in a given grid minimizing a given nonlinear objective
 // N: dimensions of the grid (number of inputs of the objective function)
 template <int N, typename... GridDimensionsT>
@@ -47,16 +46,9 @@ template <int N, typename... GridDimensionsT>
     std::array<int,N> opt_index_;
     double optimal_value_;   // objective value at optimum
     //store the explored values in unordered map to gurantee fast access
-    //-> we need a custom hasher to convert std::array<int,N> to int(keys)
-    struct ArrayHasher {
-        size_t operator()(const grid_size_t& key) const {
-            size_t hash = 0;
-            for (auto& k : key) hash ^= std::hash<int>{}(k) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-            return hash;
-        }
-    };
+    //-> we need a hasher to convert std::array<int,N> to int(keys)
     //-> define the unordered map storing explored values
-    std::unordered_map<grid_index_t, double, ArrayHasher> explored_values_; //should be something like: key->grid_index_t, value->double
+    std::unordered_map<grid_index_t, double, internals::std_array_hash<int, N>> explored_values_; //should be something like: key->grid_index_t, value->double
     //parameters
     int max_iter_ = 100;
    public:
@@ -106,12 +98,11 @@ template <int N, typename... GridDimensionsT>
     }
     //observers
 };
-
-    //TO DO:
-    /* - define a wrapper to automatically detect the types of the vectors passed to HillClimbing
-     * - observers
-     * - define grid as an outside class (together with get_grid_point functionality)
-     */
+//TO DO:
+/* - define a wrapper to automatically detect the types of the vectors passed to HillClimbing
+ * - observers
+ * - define grid as an outside class (together with get_grid_point functionality)
+ */
 
 }   // namespace fdapde
 
