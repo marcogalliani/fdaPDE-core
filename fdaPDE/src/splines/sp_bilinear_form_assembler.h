@@ -95,10 +95,8 @@ class sp_bilinear_form_assembly_loop :
         MdArray<double, MdExtents<Dynamic, Dynamic>> test_shape_dx    (n1, q), trial_shape_dx    (n2, q);
         MdArray<double, MdExtents<Dynamic, Dynamic>> test_shape_dxx   (n1, q), trial_shape_dxx   (n2, q);
 
-        std::unordered_map<const void*, Eigen::Matrix<double, Dynamic, Dynamic>> sp_map_buff;
         if constexpr (Form::XprBits & int(sp_assembler_flags::compute_physical_quad_nodes)) {
-            Base::distribute_quadrature_nodes(
-              sp_map_buff, begin, end);   // distribute quadrature nodes on physical mesh (if required)
+            Base::distribute_quadrature_nodes(begin, end);
         }
 	// start assembly loop
         internals::sp_assembler_packet<local_dim> sp_packet {};

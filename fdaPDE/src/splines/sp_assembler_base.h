@@ -57,11 +57,11 @@ struct sp_assembler_base {
     fdapde_static_assert(sizeof...(Quadrature_) < 2, YOU_CAN_SUPPLY_AT_MOST_ONE_QUADRATURE_RULE_TO_A_SP_ASSEMBLY_LOOP);
     // detect test space (since a test function is always present in a weak form)
     using TestSpace = test_space_t<Form_>;
-    using Form =
-      std::decay_t<decltype(xpr_wrap<SpMap, decltype([]<typename Xpr>() {
-	    return !(
-	        std::is_invocable_v<Xpr, sp_assembler_packet<Xpr::StaticInputSize>>);
-	  })>(std::declval<Form_>()))>;
+   protected:
+    using is_not_packet_evaluable =
+      decltype([]<typename Xpr>() { return !(std::is_invocable_v<Xpr, sp_assembler_packet<Xpr::StaticInputSize>>); });
+   public:
+    using Form = std::decay_t<decltype(xpr_wrap<SpMap, is_not_packet_evaluable>(std::declval<Form_>()))>;
     using Triangulation = typename std::decay_t<Triangulation_>;
     static constexpr int local_dim = Triangulation::local_dim;
     static constexpr int embed_dim = Triangulation::embed_dim;
@@ -84,12 +84,11 @@ struct sp_assembler_base {
     sp_assembler_base() = default;
     sp_assembler_base(
       const Form_& form, const geo_iterator& begin, const geo_iterator& end, const Quadrature_&... quadrature)
-        requires(sizeof...(quadrature) <= 1) :
-        form_(xpr_wrap<SpMap, decltype([]<typename Xpr>() {
-                                 return !(std::is_invocable_v<Xpr, sp_assembler_packet<Xpr::StaticInputSize>>);
-                             })>(form)),
+        requires(sizeof...(quadrature) <= 1)
+        :
+        form_(xpr_wrap<SpMap, is_not_packet_evaluable>(form)),
         dof_handler_(std::addressof(internals::test_space(form_).dof_handler())),
-        test_space_ (std::addressof(internals::test_space(form_))),
+        test_space_(std::addressof(internals::test_space(form_))),
         begin_(begin),
         end_(end) {
         fdapde_assert(dof_handler_->n_dofs() > 0);
@@ -116,7 +115,7 @@ struct sp_assembler_base {
         for (auto it = begin_; it != end_; ++it) {
             double a = it->nodes()[0], b = it->nodes()[1];
             for (int j = 0; j < quad_nodes__.rows(); ++j) {
-                quad_nodes_(i, 0) = (b - a) / 2 * quad_nodes__(j, 0) + (b + a) / 2;
+                quad_nodes_(i, 0) = (quad_nodes__(j, 0) + 1) * (b - a) * 0.5 + a;
                 i++;
             }
         }
@@ -163,9 +162,7 @@ struct sp_assembler_base {
     eval_shape_dxx(BasisType__&& basis, const std::vector<int>& active_dofs, IteratorType cell, DstMdArray& dst) const {
         eval_shape_derivative(basis, active_dofs, cell, dst, 2);
     }
-    void distribute_quadrature_nodes(
-      std::unordered_map<const void*, Eigen::Matrix<double, Dynamic, Dynamic>>& sp_map_buff, dof_iterator begin,
-      dof_iterator end) {
+    void distribute_quadrature_nodes(dof_iterator begin, dof_iterator end) const {
         Eigen::Matrix<double, Dynamic, Dynamic> quad_nodes;
         quad_nodes.resize(n_quadrature_nodes_ * (end_.index() - begin_.index()), embed_dim);
         int local_cell_id = 0;
@@ -183,8 +180,8 @@ struct sp_assembler_base {
               return;
           }),
           decltype([]<typename Xpr_>() {
-              return requires(Xpr_ xpr) { xpr.init(sp_map_buff, quad_nodes, begin, end); };
-          })>(form_, sp_map_buff, quad_nodes, begin, end);
+              return requires(Xpr_ xpr) { xpr.init(quad_nodes, begin, end); };
+          })>(form_, quad_nodes, begin, end);
         return;
     }
 
