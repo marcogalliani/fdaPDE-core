@@ -262,11 +262,16 @@ template <typename Scalar_, typename DataObj> struct random_access_col_view {
     dtype type_id() const { return type_id_; }
     logical_t nan() const { return compute_na_mask(data()); }
     // accessors
+    // The two operator() overloads below materialize the outer parameter pack `idxs...` to a
+    // std::array before the inner templated lambda expansion. Apple Clang 15 crashes in
+    // collectUnexpandedParameterPacks / TransformCXXFoldExpr when both `Ns_` (lambda pack) and
+    // `idxs` (outer function pack) appear in the same pack-expansion pattern.
     template <typename... Idxs>
         requires(std::is_convertible_v<Idxs, index_t> && ...) && (sizeof...(Idxs) == Order && !std::is_const_v<DataObj>)
     constexpr reference operator()(Idxs&&... idxs) {
-        return internals::apply_index_pack<sizeof...(Idxs)>([&]<int... Ns_>() -> decltype(auto) {
-            return data_((Ns_ == 0 ? static_cast<index_t>(idxs_[idxs]) : idxs)...);
+        const std::array<index_t, Order> idxs_arr_ = {static_cast<index_t>(idxs)...};
+        return internals::apply_index_pack<Order>([&]<int... Ns_>() -> decltype(auto) {
+            return data_((Ns_ == 0 ? static_cast<index_t>(idxs_[idxs_arr_[0]]) : idxs_arr_[Ns_])...);
         });
     }
     template <typename IndexPack>   // access via index-pack object
@@ -277,8 +282,9 @@ template <typename Scalar_, typename DataObj> struct random_access_col_view {
     template <typename... Idxs>
         requires(std::is_convertible_v<Idxs, index_t> && ...) && (sizeof...(Idxs) == Order)
     constexpr const_reference operator()(Idxs&&... idxs) const {
-        return internals::apply_index_pack<sizeof...(Idxs)>([&]<int... Ns_>() -> decltype(auto) {
-            return data_((Ns_ == 0 ? static_cast<index_t>(idxs_[idxs]) : idxs)...);
+        const std::array<index_t, Order> idxs_arr_ = {static_cast<index_t>(idxs)...};
+        return internals::apply_index_pack<Order>([&]<int... Ns_>() -> decltype(auto) {
+            return data_((Ns_ == 0 ? static_cast<index_t>(idxs_[idxs_arr_[0]]) : idxs_arr_[Ns_])...);
         });
     }
     template <typename IndexPack>   // access via index-pack object
@@ -592,6 +598,13 @@ class scalar_data_layer {
         }();
     };
     template <typename T> static constexpr bool is_indexable_v = is_indexable<T>::value;
+    // Note: the `{ t.size() } -> std::convertible_to<size_t>` requires-expression is extracted
+    // into a standalone concept rather than embedded in the IIFE lambda body. The inline form
+    // crashes Apple Clang 15 in Sema::BuildExprRequirement on a ReturnTypeRequirement during
+    // TransformLambdaExpr.
+    template <typename T> static constexpr bool has_size_t_size_v_ = requires(T t) {
+        { t.size() } -> std::convertible_to<size_t>;
+    };
     template <typename T> class is_vector_like {
         using T_ = std::decay_t<T>;
        public:
@@ -599,9 +612,7 @@ class scalar_data_layer {
             if constexpr (std::is_pointer_v<T_>) {
                 return is_type_supported_v<std::remove_pointer_t<T_>>;
             } else {
-                if constexpr (is_subscriptable<T_, index_t> && requires(T t) {
-                                  { t.size() } -> std::convertible_to<size_t>;
-                              }) {
+                if constexpr (is_subscriptable<T_, index_t> && has_size_t_size_v_<T_>) {
                     return is_type_supported_v<std::decay_t<decltype(std::declval<T_>()[index_t()])>>;
                 } else {
                     return false;
@@ -756,31 +767,37 @@ class scalar_data_layer {
             col_idx_[field.colname()] = header_.size() - 1;
         }
         // reserve space, copy data in internal storage
-	std::unordered_map<dtype, int> tmp = make_dtyped_map<int>();
-        std::apply(
-          [&](const auto&... ts) {
-              (
-                [&]() {
-                    using T = std::decay_t<decltype(ts)>;
-		    dtype type_id = internals::dtype_from_static_type<T>().type_id;
-                    if (type_id_map[type_id] != 0) {
-                        fetch_<T>(data_).resize(rows_, offset[type_id]);
-			// take typed data from filter
-                        for (const auto& colname : cols) {
-                            auto desc = row_filter.field_descriptor(colname);
-                            if (desc.type_id() == type_id) {
-                                fetch_<T>(data_)
-                                  .block(full_extent, std::pair {tmp[type_id], tmp[type_id] + desc.size() - 1})
-                                  .assign_inplace_from(row_filter.template col<T>(colname).data());
-                                for (int i = 0; i < desc.size(); ++i) { freemem_[type_id].push_back(false); }
-				tmp[type_id] += desc.size();
-                            }
-                        }
+        std::unordered_map<dtype, int> tmp = make_dtyped_map<int>();
+        // Apple-Clang-15 workaround: the original implementation used a `std::apply` over a
+        // tuple of types with an inner fold-expression `(lambda(), ...)`. The fold over an
+        // outer parameter pack inside a captured-by-reference lambda crashes clang in
+        // collectUnexpandedParameterPacks / TransformCXXFoldExpr during return-type deduction.
+        // The same logic is expressed below as explicit per-type invocations of a single
+        // templated member-function lambda — `types` is a fixed-size tuple, so the static
+        // dispatch is exhaustive.
+        auto copy_typed_block_ = [&]<typename T>() {
+            dtype type_id = internals::dtype_from_static_type<T>().type_id;
+            if (type_id_map[type_id] != 0) {
+                fetch_<T>(data_).resize(rows_, offset[type_id]);
+                // take typed data from filter
+                for (const auto& colname : cols) {
+                    auto desc = row_filter.field_descriptor(colname);
+                    if (desc.type_id() == type_id) {
+                        fetch_<T>(data_)
+                          .block(full_extent, std::pair {tmp[type_id], tmp[type_id] + desc.size() - 1})
+                          .assign_inplace_from(row_filter.template col<T>(colname).data());
+                        for (int i = 0; i < desc.size(); ++i) { freemem_[type_id].push_back(false); }
+                        tmp[type_id] += desc.size();
                     }
-                }(),
-                ...);
-          },
-          types {});
+                }
+            }
+        };
+        copy_typed_block_.template operator()<double>();
+        copy_typed_block_.template operator()<float>();
+        copy_typed_block_.template operator()<std::int64_t>();
+        copy_typed_block_.template operator()<std::int32_t>();
+        copy_typed_block_.template operator()<bool>();
+        copy_typed_block_.template operator()<std::string>();
     }
     template <typename LayerType>
     scalar_data_layer(const random_access_row_view<LayerType>& row_filter) :
@@ -883,8 +900,10 @@ class scalar_data_layer {
                 (sizeof...(Extents_) == Order && is_type_supported_v<Scalar>)
     void resize(Extents_... exts) {
         auto& data = fetch_<Scalar>(data_);
-        if (internals::apply_index_pack<Order>(
-              [&]<int... Ns_>() { return ((std::cmp_equal(exts, data.extent(Ns_))) && ...); })) {
+        std::array<index_t, Order> exts_arr_a_ = {static_cast<index_t>(exts)...};
+        bool same_size_a_ = true;
+        for (int i_ = 0; i_ < Order; ++i_) { if (!std::cmp_equal(exts_arr_a_[i_], data.extent(i_))) { same_size_a_ = false; break; } }
+        if (same_size_a_) {
             return;   // exts coincide with current size, skip resizing
         }
         data.resize(static_cast<index_t>(exts)...);   // resize storage discarding old values
@@ -912,7 +931,10 @@ class scalar_data_layer {
     void conservative_resize(Extents_... exts) {
         using mem_t = MdArray<Scalar, full_dynamic_extent_t<Order>, internals::layout_left>;
         auto& data = fetch_<Scalar>(data_);
-        if (internals::apply_index_pack<Order>([&]<int... Ns_>() { return ((exts == data.extent(Ns_)) && ...); })) {
+        std::array<index_t, Order> exts_arr_b_ = {static_cast<index_t>(exts)...};
+        bool same_size_b_ = true;
+        for (int i_ = 0; i_ < Order; ++i_) { if (exts_arr_b_[i_] != data.extent(i_)) { same_size_b_ = false; break; } }
+        if (same_size_b_) {
             return;   // exts coincide with current size, skip resizing
         }
         dtype type_id = internals::dtype_from_static_type<Scalar>().type_id;

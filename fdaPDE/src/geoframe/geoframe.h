@@ -123,13 +123,16 @@ template <typename... Triangulation_> struct GeoFrame {
         fdapde_static_assert(sizeof...(GeoInfo) == Order, BAD_LAYER_CONSTRUCTION__NO_MATCHING_ORDER);
 	fdapde_assert(!name.empty() && !has_layer(name));
         using geo_layer_t = GeoLayer<Triangulation, std::tuple<GeoInfo...>>;
+        // Apple-Clang-15 workaround: the original apply_index_pack wrappers below introduced an
+        // unused templated lambda pack `<int... Ns>` alongside the outer packs `GeoInfo...` and
+        // `Args.../args...`. Substituting that combination crashes clang in
+        // collectUnexpandedParameterPacks/TransformCXXFoldExpr. Neither lambda body used Ns, so we
+        // can just construct the array and the geo_layer directly.
         layers_.emplace_back(
-          name,                                                                // layer name
-          internals::apply_index_pack<sizeof...(GeoInfo)>([&]<int... Ns>() {   // layer category
-              return std::array<ltype, sizeof...(GeoInfo)> {ltype_from_layer_tag<typename GeoInfo::layer_tag>()...};
-          }),
-          internals::apply_index_pack<sizeof...(GeoInfo)>(   // data
-            [&, this]<int... Ns>() { return geo_layer_t(std::forward<Args>(args)...); }));
+          name,                                                                  // layer name
+          std::array<ltype, sizeof...(GeoInfo)> {                                // layer category
+            ltype_from_layer_tag<typename GeoInfo::layer_tag>()...},
+          geo_layer_t(std::forward<Args>(args)...));                             // data
         layer_name_to_idx_[name] = n_layers_;
         n_layers_++;
         return geo_cast<GeoInfo...>(operator[](name));

@@ -21,28 +21,54 @@
 
 namespace fdapde {
 
+// Standalone C++20 concept used by SparseBlockMatrix to identify matrix-like block arguments.
+// Lifted out of the class body as an Apple Clang 15 workaround: the original trait wrapped
+// this same `requires`-expression in an IIFE inside the class, which crashes
+// Sema::BuildExprRequirement (ReturnTypeRequirement inside TransformLambdaExpr) when
+// instantiated with deep Eigen expression-template types.
+template <typename T>
+concept MatrixBlockExpression = requires(T t) {
+    typename std::decay_t<T>::Scalar;
+    { t.rows() } -> std::convertible_to<std::size_t>;
+    { t.cols() } -> std::convertible_to<std::size_t>;
+};
+
 // A C++20 Eigen-compatible sparse block matrix (only ColMajor support)
 template <typename Scalar_, int Rows_, int Cols_, int Options_ = Eigen::ColMajor, typename StorageIndex_ = Eigen::Index>
 struct SparseBlockMatrix :
     public Eigen::SparseMatrixBase<SparseBlockMatrix<Scalar_, Rows_, Cols_, Options_, StorageIndex_>> {
     static_assert(Rows_ > 1 || Cols_ > 1);
    private:
-    template <typename T> class is_matrix_blk {
-        using T_ = std::decay_t<T>;
-       public:
-        static constexpr bool value = []() {
-            if constexpr (requires(T_ t) {
-                              typename T_::Scalar;
-                              { t.rows() } -> std::convertible_to<std::size_t>;
-                              { t.cols() } -> std::convertible_to<std::size_t>;
-                          }) {
-                return std::convertible_to<typename T_::Scalar, Scalar_>;
+    // Block-typed trait derived from the standalone concept.
+    template <typename T> static constexpr bool is_matrix_blk_v =
+      MatrixBlockExpression<T> && std::convertible_to<typename std::decay_t<T>::Scalar, Scalar_>;
+
+    // Per-block dimension probes. Using a non-lambda function template with `if constexpr`
+    // sidesteps the Apple Clang 15 templated-lambda + Eigen expression-template ICE.
+    template <typename Arg> static int rows_of_(const Arg& a) {
+        if constexpr (is_matrix_blk_v<Arg>) return static_cast<int>(a.rows());
+        else { fdapde_assert(a == 0); return -1; }
+    }
+    template <typename Arg> static int cols_of_(const Arg& a) {
+        if constexpr (is_matrix_blk_v<Arg>) return static_cast<int>(a.cols());
+        else { fdapde_assert(a == 0); return -1; }
+    }
+    // Per-block storage helper. Invoked from a function-scope comma-operator fold in the
+    // variadic constructor — not from a templated generic lambda — which avoids
+    // TransformCXXFoldExpr-in-lambda ICEs.
+    template <typename Arg> void emplace_single_block_(int h, Arg&& arg) {
+        if constexpr (is_matrix_blk_v<Arg>) {
+            if constexpr (internals::is_eigen_dense_xpr_v<Arg>) {
+                blocks_.emplace_back(arg.sparseView());
             } else {
-                return false;
+                blocks_.emplace_back(std::forward<Arg>(arg));
             }
-        }();
-    };
-    template <typename T> static constexpr bool is_matrix_blk_v = is_matrix_blk<T>::value;
+        } else {
+            const Eigen::Index r_blk = h / Cols_;
+            const Eigen::Index c_blk = h % Cols_;
+            blocks_.emplace_back(Eigen::SparseMatrix<Scalar_>(outer_size_[c_blk], inner_size_[r_blk]));
+        }
+    }
    public:
     using Scalar = Scalar_;
     using StorageIndex = StorageIndex_;
@@ -58,79 +84,55 @@ struct SparseBlockMatrix :
         fdapde_static_assert(
           ((is_matrix_blk_v<Block> || std::is_convertible_v<Block, Scalar_>) && ...), INVALID_BLOCK_TYPE);
 
-        std::array<int, Rows_ * Cols_> row_dims, col_dims;
-        internals::for_each_index_and_args<sizeof...(Block)>([&]<int Ns_, typename Arg_>(const Arg_& arg) {
-            if constexpr (is_matrix_blk_v<Arg_>) {
-                row_dims[Ns_] = arg.rows();
-                col_dims[Ns_] = arg.cols();
-            } else {
-                fdapde_assert(arg == 0);   // allows only 0 placeholder
-                row_dims[Ns_] = -1;
-                col_dims[Ns_] = -1;
-            }
-	  }, m...);
-	// rowwise block dimensions check, assign -1 block-row sizes
+        // Direct array brace-initialization via per-arg static helpers — no embedded
+        // templated lambda, no for_each_index_and_args.
+        std::array<int, Rows_ * Cols_> row_dims = { rows_of_(m)... };
+        std::array<int, Rows_ * Cols_> col_dims = { cols_of_(m)... };
+
+        // rowwise block dimensions check, assign -1 block-row sizes
         for (int i = 0; i < Rows_; ++i) {
-            // search first dimension != -1 on row
             int k = 0;
             while (k < Cols_ && row_dims[i * Cols_ + k] == -1) { k++; }
             int row = (k == Cols_) ? 1 : row_dims[i * Cols_ + k];
             for (int j = 0; j < Cols_; ++j) {
                 fdapde_assert(row_dims[i * Cols_ + j] == row || row_dims[i * Cols_ + j] == -1);
-		// normalize row dimensions, if still considered dynamic
                 if (row_dims[i * Cols_ + j] == -1) { row_dims[i * Cols_ + j] = row; }
             }
         }
-	// colwise block dimensions check, assign -1 block-col sizes
+        // colwise block dimensions check, assign -1 block-col sizes
         for (int i = 0; i < Cols_; ++i) {
-            // search first dimension != -1 on col
             int k = 0;
             while (k < Rows_ && col_dims[i + k * Cols_] == -1) { k++; }
             int col = (k == Rows_) ? 1 : col_dims[i + k * Cols_];
             for (int j = 0; j < Rows_; ++j) {
                 fdapde_assert(col_dims[i + k * Cols_] == col || col_dims[i + k * Cols_] == -1);
-                // normalize col dimensions, if still considered dynamic
                 if (col_dims[i + k * Cols_] == -1) { col_dims[i + k * Cols_] = col; }
             }
         }
-	// extract overall number of columns and rows
+        // extract overall number of columns and rows
         outer_offset_[0] = 0;
         inner_offset_[0] = 0;
         Eigen::Index i = 0, j = 0, k = 0;
-	for(int h = 0; h < Rows_ * Cols_; ++h) {
-              // row and column block indexes
-              Eigen::Index r_blk = std::floor(i / Cols_);
-              Eigen::Index c_blk = i % Cols_;
-              if (r_blk == 0) {
-                  cols_ += col_dims[h];
-                  outer_size_[j++] = col_dims[h];
-                  outer_offset_[j] = col_dims[h] + outer_offset_[j - 1];
-              }
-              if (c_blk == 0) {
-                  rows_ += row_dims[h];
-                  inner_size_[k++] = row_dims[h];
-                  inner_offset_[k] = row_dims[h] + inner_offset_[k - 1];
-              }
-              i++;
-	}
-        // evaluate each block and store in internal storage
-        blocks_.reserve(Rows_ * Cols_);
-        i = 0;
-        internals::for_each_index_and_args<sizeof...(Block)>([&]<int Ns_, typename Arg_>(const Arg_& arg) {
-            if constexpr (is_matrix_blk_v<Arg_>) {
-                if constexpr (internals::is_eigen_dense_xpr_v<Arg_>) {
-                    blocks_.emplace_back(arg.sparseView());
-                } else {
-                    blocks_.emplace_back(arg);
-                }
-            } else {
-                // row and column block indexes
-                Eigen::Index r_blk = std::floor(i / Cols_);
-                Eigen::Index c_blk = i % Cols_;
-                blocks_.emplace_back(Eigen::SparseMatrix<Scalar_>(outer_size_[c_blk], inner_size_[r_blk]));
+        for (int h = 0; h < Rows_ * Cols_; ++h) {
+            Eigen::Index r_blk = std::floor(i / Cols_);
+            Eigen::Index c_blk = i % Cols_;
+            if (r_blk == 0) {
+                cols_ += col_dims[h];
+                outer_size_[j++] = col_dims[h];
+                outer_offset_[j] = col_dims[h] + outer_offset_[j - 1];
             }
-	    i++;
-	  }, m...);
+            if (c_blk == 0) {
+                rows_ += row_dims[h];
+                inner_size_[k++] = row_dims[h];
+                inner_offset_[k] = row_dims[h] + inner_offset_[k - 1];
+            }
+            i++;
+        }
+        // evaluate each block and store in internal storage via a function-scope
+        // comma-operator fold over emplace_single_block_ — no generic lambda.
+        blocks_.reserve(Rows_ * Cols_);
+        int idx_ = 0;
+        (emplace_single_block_(idx_++, std::forward<Block>(m)), ...);
     }
     template <typename Extents>
         requires(internals::is_subscriptable<Extents, Eigen::Index> &&
