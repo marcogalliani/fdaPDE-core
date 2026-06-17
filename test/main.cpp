@@ -38,7 +38,7 @@
 #include "src/binary_matrix_test.cpp"
 */
 
-// #include "src/rand_linear_algebra_test.cpp"
+#include "src/rand_linear_algebra_test.cpp"
 /*
 // finite_elements
 #include "src/fem_operators_test.cpp"
@@ -53,10 +53,10 @@
 #include "src/fspai_test.cpp"
 */
 
-int main(/*int argc, char** argv*/) {
+int main(int argc, char** argv) {
     // // start testing
-    // testing::InitGoogleTest(&argc, argv);
-    // return RUN_ALL_TESTS();
+    testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
 
   return 0;
 }
