@@ -187,11 +187,11 @@ concept is_int_sized = requires(T t) {
 
 // detects if T behaves like a vector
 template <typename T> class is_vector_like{
-    using T = std::decay<T>;
+    using T_ = std::decay<T>;
     public:
     static constexpr value = [](){
 #ifdef __FDAPDE_HAS_EIGEN__
-        if constexpr (internals::is_eigen_dense_xpr_v<T>){
+        if constexpr (internals::is_eigen_dense_xpr_v<T_>){
             return internals::is_eigen_dense_vec_v<T_>;
         }else
 #endif  
