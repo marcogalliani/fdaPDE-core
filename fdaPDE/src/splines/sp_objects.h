@@ -270,13 +270,13 @@ template <typename SpSpace_> class BsFunction : public ScalarFieldBase<SpSpace_:
         if (e_id == -1) return std::numeric_limits<Scalar>::quiet_NaN();   // return NaN if point lies outside domain
         // map p to reference interval [-1, 1]
         double a = sp_space_->triangulation().range()[0], b = sp_space_->triangulation().range()[1];
-        double ref_p;
+        double p_;
         if constexpr (internals::is_subscriptable<InputType, int>) {
-            ref_p = p[0];
+            p_ = p[0];
         } else {
-            ref_p = p;
+            p_ = p;
         }
-        ref_p = (ref_p - (b - a) / 2) * 2 / (b + a);
+        double ref_p = 2 * (p_ - a) / (b - a) - 1;
         // get active dofs
         typename DofHandlerType::CellType cell = sp_space_->dof_handler().cell(e_id);
 	std::vector<int> active_dofs = cell.dofs();
@@ -327,7 +327,6 @@ template <typename Derived_> struct SpMap : public ScalarFieldBase<Derived_::Sta
    private:
     using OutputType = decltype(std::declval<Derived_>().operator()(std::declval<typename Derived_::InputType>()));
     using Derived = std::decay_t<Derived_>;
-    using MatrixType = Eigen::Matrix<double, Dynamic, Dynamic>;
    public:
     using InputType = internals::sp_assembler_packet<Derived::StaticInputSize>;
     using Scalar = double;
@@ -340,32 +339,25 @@ template <typename Derived_> struct SpMap : public ScalarFieldBase<Derived_::Sta
     static constexpr int Cols = 1;
 
     constexpr SpMap() = default;
-    constexpr SpMap(const Derived_& xpr) : xpr_(&xpr) { }
+    constexpr SpMap(const Derived_& xpr) : xpr_(xpr) { }
     template <typename CellIterator>
     void init(
-      std::unordered_map<const void*, MatrixType>& buff, const MatrixType& nodes, [[maybe_unused]] CellIterator begin,
+      const Eigen::Matrix<double, Dynamic, Dynamic>& nodes, [[maybe_unused]] CellIterator begin,
       [[maybe_unused]] CellIterator end) const {
-        const void* ptr = reinterpret_cast<const void*>(xpr_);
-        if (buff.find(ptr) == buff.end()) {
-            Eigen::Matrix<double, Dynamic, Dynamic> mapped(nodes.rows(), Rows * Cols);
-            for (int i = 0, n = nodes.rows(); i < n; ++i) { mapped(i, 0) = xpr_->operator()(nodes.row(i)); }
-            buff[ptr] = mapped;
-            map_ = &buff[ptr];
-        } else {
-            map_ = &buff[ptr];
-        }
+        map_.resize(nodes.rows(), Rows * Cols);
+        for (int i = 0, n = nodes.rows(); i < n; ++i) { map_(i, 0) = xpr_(nodes.row(i)); }
     }
     // bs assembler evaluation
     constexpr OutputType operator()(const InputType& sp_packet) const {
-        return map_->operator()(sp_packet.quad_node_id, 0);
+        return map_(sp_packet.quad_node_id, 0);
     }
     constexpr const Derived& derived() const { return xpr_; }
     constexpr int input_size() const { return StaticInputSize; }
     constexpr int rows() const { return Rows; }
     constexpr int cols() const { return Cols; }
    private:
-    const Derived* xpr_;
-    mutable const MatrixType* map_;
+    Derived xpr_;
+    mutable Eigen::Matrix<double, Dynamic, Dynamic> map_;
 };
  
 }   // namespace fdapde

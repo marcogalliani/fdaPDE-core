@@ -59,10 +59,8 @@ class sp_linear_form_assembly_loop :
         int q = Base::n_quadrature_nodes_;
         MdArray<double, MdExtents<Dynamic, Dynamic>> shape_values(n, q);
 
-        std::unordered_map<const void*, Eigen::Matrix<double, Dynamic, Dynamic>> sp_map_buff;
         if constexpr (Form::XprBits & int(sp_assembler_flags::compute_physical_quad_nodes)) {
-            Base::distribute_quadrature_nodes(
-              sp_map_buff, begin, end);   // distribute quadrature nodes on physical mesh (if required)
+            Base::distribute_quadrature_nodes(begin, end);
         }
 	// start assembly loop
         internals::sp_assembler_packet<local_dim> sp_packet {};
