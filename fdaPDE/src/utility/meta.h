@@ -180,26 +180,17 @@ template <typename T, int Order, typename IndexT>
 static constexpr bool is_indexable_v = is_indexable<T, Order, IndexT>::value;
   
 // detects if T behaves like a vector
-// Note: the `{ t.size() } -> std::convertible_to<int>` requires-expression is extracted into a
-// standalone concept rather than embedded inline in the IIFE lambda body. The inline form crashes
-// Apple Clang 15 in Sema::BuildExprRequirement / TransformLambdaExpr when substituting through
-// nested return-type-requirements during template instantiation.
-template <typename T> concept has_int_size_ = requires(T t) {
-    { t.size() } -> std::convertible_to<int>;
-};
-template <typename T> class is_vector_like {
-    using T_ = std::decay_t<T>;
-   public:
-    static constexpr bool value = []() {
+template <typename T>
+concept is_vector_like = 
 #ifdef __FDAPDE_HAS_EIGEN__
-        if constexpr (internals::is_eigen_dense_xpr_v<T_>) {
-            return internals::is_eigen_dense_vec_v<T_>;
-        } else
+    (is_eigen_dense_xpr_v<std::decay_t<T>> && is_eigen_dense_vec_v<std::decay_t<T>>) ||
+    (!is_eigen_dense_xpr_v<std::decay_t<T>> && 
+     (is_subscriptable<std::decay_t<T>, int> || (is_indexable_v<std::decay_t<T>, 1, int> && !is_indexable_v<std::decay_t<T>, 2, int>)) && 
+     requires(std::decay_t<T> t) { { t.size() } -> std::convertible_to<int>; });
+#else
+    (is_subscriptable<std::decay_t<T>, int> || (is_indexable_v<std::decay_t<T>, 1, int> && !is_indexable_v<std::decay_t<T>, 2, int>)) && 
+    requires(std::decay_t<T> t) { { t.size() } -> std::convertible_to<int>; };
 #endif
-            return (is_subscriptable<T_, int> || (is_indexable_v<T_, 1, int> && !is_indexable_v<T_, 2, int>)) &&
-                   has_int_size_<T_>;
-    }();
-};
 template <typename T> static constexpr bool is_vector_like_v = is_vector_like<T>::value;
 
 template <typename T>

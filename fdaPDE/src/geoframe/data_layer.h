@@ -598,29 +598,21 @@ class scalar_data_layer {
         }();
     };
     template <typename T> static constexpr bool is_indexable_v = is_indexable<T>::value;
-    // Note: the `{ t.size() } -> std::convertible_to<size_t>` requires-expression is extracted
-    // into a standalone concept rather than embedded in the IIFE lambda body. The inline form
-    // crashes Apple Clang 15 in Sema::BuildExprRequirement on a ReturnTypeRequirement during
-    // TransformLambdaExpr.
-    template <typename T> static constexpr bool has_size_t_size_v_ = requires(T t) {
-        { t.size() } -> std::convertible_to<size_t>;
+    
+    template <typename T>
+    static constexpr bool holds_supported_type_v = requires(T t) {
+        // We only evaluate this if t[index] is valid
+        requires is_type_supported_v<std::decay_t<decltype(t[std::declval<index_t>()])>>;
     };
-    template <typename T> class is_vector_like {
-        using T_ = std::decay_t<T>;
-       public:
-        static constexpr bool value = []() {
-            if constexpr (std::is_pointer_v<T_>) {
-                return is_type_supported_v<std::remove_pointer_t<T_>>;
-            } else {
-                if constexpr (is_subscriptable<T_, index_t> && has_size_t_size_v_<T_>) {
-                    return is_type_supported_v<std::decay_t<decltype(std::declval<T_>()[index_t()])>>;
-                } else {
-                    return false;
-                }
-            }
-        }();
-    };
-    template <typename T> static constexpr bool is_vector_like_v = is_vector_like<T>::value;
+    // detects if T behaves like a vector having supported types
+    template <typename T> 
+    static constexpr bool is_vector_like_v = 
+        // Case A: It's a pointer to a supported type
+        (std::is_pointer_v<std::decay_t<T>> && is_type_supported_v<std::remove_pointer_t<std::decay_t<T>>>) 
+        ||
+        // Case B: It behaves like a vector AND holds a supported type
+        (internals::is_vector_like<T> && holds_supported_type_v<T>);
+
 
     using row_view = plain_row_view<scalar_data_layer>;
     using const_row_view = plain_row_view<const scalar_data_layer>;

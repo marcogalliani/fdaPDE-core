@@ -21,17 +21,16 @@
 
 namespace fdapde {
 
-// Standalone C++20 concept used by SparseBlockMatrix to identify matrix-like block arguments.
-// Lifted out of the class body as an Apple Clang 15 workaround: the original trait wrapped
-// this same `requires`-expression in an IIFE inside the class, which crashes
-// Sema::BuildExprRequirement (ReturnTypeRequirement inside TransformLambdaExpr) when
-// instantiated with deep Eigen expression-template types.
+
+namespace internals{
+// Concept to detect block matrices
 template <typename T>
-concept MatrixBlockExpression = requires(T t) {
+concept is_matrix_blk = requires(T t) {
     typename std::decay_t<T>::Scalar;
     { t.rows() } -> std::convertible_to<std::size_t>;
     { t.cols() } -> std::convertible_to<std::size_t>;
 };
+} // namespace internals
 
 // A C++20 Eigen-compatible sparse block matrix (only ColMajor support)
 template <typename Scalar_, int Rows_, int Cols_, int Options_ = Eigen::ColMajor, typename StorageIndex_ = Eigen::Index>
@@ -41,7 +40,7 @@ struct SparseBlockMatrix :
    private:
     // Block-typed trait derived from the standalone concept.
     template <typename T> static constexpr bool is_matrix_blk_v =
-      MatrixBlockExpression<T> && std::convertible_to<typename std::decay_t<T>::Scalar, Scalar_>;
+      internals::is_matrix_blk<T> && std::convertible_to<typename std::decay_t<T>::Scalar, Scalar_>;
 
     // Per-block dimension probes. Using a non-lambda function template with `if constexpr`
     // sidesteps the Apple Clang 15 templated-lambda + Eigen expression-template ICE.
