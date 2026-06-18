@@ -23,11 +23,6 @@ namespace fdapde {
 namespace internals {
 
 // apply lambda F_ to each value in index pack {0, ..., N_ - 1}
-// Apple-Clang-15 workaround: extracted the inner templated generic lambda into a separate
-// function template so the call to `f.template operator()<Ns_...>()` happens at the named-
-// function level rather than inside an embedded lambda. The original lambda form crashes
-// clang during return-type deduction when invoked from contexts with surrounding template
-// parameter packs.
 template <typename F_, int... Ns_>
 constexpr decltype(auto) apply_index_pack_impl_(F_&& f, std::integer_sequence<int, Ns_...>) {
     return f.template operator()<Ns_...>();
@@ -35,11 +30,7 @@ constexpr decltype(auto) apply_index_pack_impl_(F_&& f, std::integer_sequence<in
 template <int N_, typename F_> constexpr decltype(auto) apply_index_pack(F_&& f) {
     return apply_index_pack_impl_(std::forward<F_>(f), std::make_integer_sequence<int, N_> {});
 }
-// Apple-Clang-15 workaround: the original implementations used a templated generic lambda
-// containing a fold expression `(f.template operator()<Ns_>(), ...)`. Instantiating that pattern
-// crashes clang in collectUnexpandedParameterPacks / TransformCXXFoldExpr whenever the caller is
-// itself inside a context with outer parameter packs. The recursive forms below are equivalent
-// and avoid both the fold expression and the templated generic lambda.
+// 
 template <int N_, int I_, typename F_> constexpr void for_each_index_in_pack_impl_(F_&& f) {
     if constexpr (I_ < N_) {
         f.template operator()<I_>();
@@ -49,10 +40,7 @@ template <int N_, int I_, typename F_> constexpr void for_each_index_in_pack_imp
 template <int N_, typename F_> constexpr void for_each_index_in_pack(F_&& f) {
     for_each_index_in_pack_impl_<N_, 0>(std::forward<F_>(f));
 }
-
 // apply lambda F_ to each index and args pair {(0, args[0]), ..., (N_ - 1, args[N_ - 1])}
-// Recursive form (no fold expression, no templated generic lambda) to avoid the Apple Clang 15
-// ICE described above.
 template <int I_, int N_, typename F_, typename Tuple_>
 constexpr void for_each_index_and_args_impl_(F_&& f, Tuple_&& tuple) {
     if constexpr (I_ < N_) {
@@ -187,7 +175,7 @@ concept is_int_sized = requires(T t) {
 
 // detects if T behaves like a vector
 template <typename T> class is_vector_like{
-    using T_ = std::decay<T>;
+    using T_ = std::decay_t<T>;
     public:
     static constexpr bool value = [](){
 #ifdef __FDAPDE_HAS_EIGEN__
@@ -223,6 +211,13 @@ template <typename T> class is_matrix_like {
    };
 };
 template <typename T> static constexpr bool is_matrix_like_v = is_matrix_like<T>::value;
+
+template <typename T>
+concept is_matrix_blk = requires(T t) {
+    typename std::decay_t<T>::Scalar;
+    { t.rows() } -> std::convertible_to<std::size_t>;
+    { t.cols() } -> std::convertible_to<std::size_t>;
+};
 
 // get i-th element from parameter pack
 template <int N, typename... Ts>
