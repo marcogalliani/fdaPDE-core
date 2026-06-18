@@ -14,23 +14,19 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __FDAPDE_CORE_MODULE_H__
-#define __FDAPDE_CORE_MODULE_H__
+#ifndef __FDAPDE_ODE_MODULE_H__
+#define __FDAPDE_ODE_MODULE_H__
 
 // clang-format off
 
-// include modules
+// include required modules
 #include "linear_algebra.h"    // pull Eigen first
 #include "utility.h"
-#include "fields.h"
-#include "geometry.h"
-#include "io.h"
-#include "finite_elements.h"
-#include "splines.h"
-#include "optimization.h"
-#include "ode.h"
-#include "geoframe.h"
+
+// time-integration primitives
+#include "src/ode/butcher_tableau.h"
+#include "src/ode/rk_integrator.h"
 
 // clang-format on
 
-#endif   // __FDAPDE_CORE_MODULE_H__
+#endif   // __FDAPDE_ODE_MODULE_H__

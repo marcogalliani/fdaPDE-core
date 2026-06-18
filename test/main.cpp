@@ -39,6 +39,8 @@
 */
 
 #include "src/rand_linear_algebra_test.cpp"
+// ode
+#include "src/ode_test.cpp"
 /*
 // finite_elements
 #include "src/fem_operators_test.cpp"
