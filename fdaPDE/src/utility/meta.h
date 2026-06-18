@@ -179,19 +179,28 @@ template <typename T, int Order, typename IndexT> class is_indexable {
 template <typename T, int Order, typename IndexT>
 static constexpr bool is_indexable_v = is_indexable<T, Order, IndexT>::value;
   
-// detects if T behaves like a vector
+// detects if T has an int size method
 template <typename T>
-concept is_vector_like = 
+concept is_int_sized = requires(T t) {
+    { t.size() } -> std::convertible_to<int>;
+};
+
+// detects if T behaves like a vector
+template <typename T> class is_vector_like{
+    using T = std::decay<T>;
+    public:
+    static constexpr value = [](){
 #ifdef __FDAPDE_HAS_EIGEN__
-    (is_eigen_dense_xpr_v<std::decay_t<T>> && is_eigen_dense_vec_v<std::decay_t<T>>) ||
-    (!is_eigen_dense_xpr_v<std::decay_t<T>> && 
-     (is_subscriptable<std::decay_t<T>, int> || (is_indexable_v<std::decay_t<T>, 1, int> && !is_indexable_v<std::decay_t<T>, 2, int>)) && 
-     requires(std::decay_t<T> t) { { t.size() } -> std::convertible_to<int>; });
-#else
-    (is_subscriptable<std::decay_t<T>, int> || (is_indexable_v<std::decay_t<T>, 1, int> && !is_indexable_v<std::decay_t<T>, 2, int>)) && 
-    requires(std::decay_t<T> t) { { t.size() } -> std::convertible_to<int>; };
-#endif
+        if constexpr (internals::is_eigen_dense_xpr_v<T>){
+            return internals::is_eigen_dense_vec_v<T_>;
+        }else
+#endif  
+            return (is_subscriptable<T_, int> || (is_indexable_v<T_, 1, int> && !is_indexable_v<T_, 2, int>)) &&
+                   is_int_sized<T_>;
+    }();
+};
 template <typename T> static constexpr bool is_vector_like_v = is_vector_like<T>::value;
+
 
 template <typename T>
     requires(is_vector_like_v<T>)
