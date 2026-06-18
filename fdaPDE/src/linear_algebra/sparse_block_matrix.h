@@ -21,17 +21,6 @@
 
 namespace fdapde {
 
-
-namespace internals{
-// Concept to detect block matrices
-template <typename T>
-concept is_matrix_blk = requires(T t) {
-    typename std::decay_t<T>::Scalar;
-    { t.rows() } -> std::convertible_to<std::size_t>;
-    { t.cols() } -> std::convertible_to<std::size_t>;
-};
-} // namespace internals
-
 // A C++20 Eigen-compatible sparse block matrix (only ColMajor support)
 template <typename Scalar_, int Rows_, int Cols_, int Options_ = Eigen::ColMajor, typename StorageIndex_ = Eigen::Index>
 struct SparseBlockMatrix :
