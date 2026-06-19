@@ -43,12 +43,12 @@ template <typename Derived_> class Jacobian : public MatrixFieldBase<Derived_::S
     explicit constexpr Jacobian(const Derived_& xpr) : Base(), xpr_(xpr) {
         if constexpr (StaticInputSize == Dynamic) data_.resize(xpr_.rows() * xpr_.input_size());
         for (int i = 0; i < xpr_.input_size(); ++i) {
-            for (int j = 0; j < xpr_.rows(); ++j) { data_[i * Cols + j] = FunctorType(xpr_[j], i); }
+            for (int j = 0; j < xpr_.rows(); ++j) { data_[i * cols() + j] = FunctorType(xpr_[j], i); }
         }
     }
     // getters
-    constexpr const FunctorType& operator()(int i, int j) { return data_[i * Cols + j]; }
-    constexpr Scalar eval(int i, int j, const InputType& p) const { return data_[i * Cols + j](p); }
+    constexpr const FunctorType& operator()(int i, int j) { return data_[i * cols() + j]; }
+    constexpr Scalar eval(int i, int j, const InputType& p) const { return data_[i * cols() + j](p); }
     constexpr int rows() const { return xpr_.input_size(); }
     constexpr int cols() const { return xpr_.rows(); }
     constexpr int input_size() const { return xpr_.input_size(); }

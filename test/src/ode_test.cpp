@@ -22,7 +22,6 @@
 
 using fdapde::ButcherTableau;
 using fdapde::RKIntegrator;
-using fdapde::fd_ode_field;
 namespace ode_schemes = fdapde::ode_schemes;
 
 using vector_t = Eigen::Matrix<double, fdapde::Dynamic, 1>;
@@ -78,8 +77,9 @@ template <typename Map> matrix_t fd_jacobian(Map&& g, const vector_t& y, double 
     return J;
 }
 
-double integrate_scalar(const RKIntegrator& integrator, const scalar_linear_field& f, double t0, double T, int n,
-                        double y0) {
+template <int Stages>
+double integrate_scalar(const RKIntegrator<Stages>& integrator, const scalar_linear_field& f, double t0, double T,
+                        int n, double y0) {
     const double dt = (T - t0) / n;
     vector_t y(1);
     y << y0;
@@ -91,22 +91,16 @@ double integrate_scalar(const RKIntegrator& integrator, const scalar_linear_fiel
     return y[0];
 }
 
-struct named_tableau {
-    const char* name;
-    ButcherTableau tableau;
-    int order;
-    bool is_explicit;
-};
-
-std::vector<named_tableau> all_tableaux() {
-    return {
-      {"forward_euler",     ode_schemes::forward_euler(),     1, true },
-      {"backward_euler",    ode_schemes::backward_euler(),    1, false},
-      {"crank_nicolson",    ode_schemes::crank_nicolson(),    2, false},
-      {"implicit_midpoint", ode_schemes::implicit_midpoint(), 2, false},
-      {"gauss_legendre_2",  ode_schemes::gauss_legendre_2(),  4, false},
-      {"rk4",               ode_schemes::rk4(),               4, true }
-    };
+// apply visit(name, tableau, order, is_explicit) to every named scheme. The tableaux have distinct
+// types (ButcherTableau<Stages> with different Stages), so they cannot share a container; instead the
+// visitor is generic (templated on the tableau) and invoked once per scheme.
+template <typename Visitor> void for_each_scheme(Visitor&& visit) {
+    visit("forward_euler",     ode_schemes::forward_euler(),     1, true );
+    visit("backward_euler",    ode_schemes::backward_euler(),    1, false);
+    visit("crank_nicolson",    ode_schemes::crank_nicolson(),    2, false);
+    visit("implicit_midpoint", ode_schemes::implicit_midpoint(), 2, false);
+    visit("gauss_legendre_2",  ode_schemes::gauss_legendre_2(),  4, false);
+    visit("rk4",               ode_schemes::rk4(),               4, true );
 }
 
 }   // namespace
@@ -114,14 +108,18 @@ std::vector<named_tableau> all_tableaux() {
 // tableau structural properties: row-sum consistency (sum_j A_ij = c_i), sum_i b_i = 1,
 // and correct explicit/implicit classification.
 TEST(ode_test, tableau_consistency) {
-    for (const auto& nt : all_tableaux()) {
-        const ButcherTableau& T = nt.tableau;
-        EXPECT_NEAR(T.b().sum(), 1.0, 1e-12) << nt.name;
-        for (int i = 0; i < T.n_stages(); ++i) {
-            EXPECT_NEAR(T.A().row(i).sum(), T.c()(i), 1e-12) << nt.name << " row " << i;
+    for_each_scheme([](const char* name, auto tab, int /*order*/, bool is_explicit) {
+        constexpr int S = std::decay_t<decltype(tab)>::n_stages();
+        double b_sum = 0;
+        for (double bi : tab.b()) { b_sum += bi; }
+        EXPECT_NEAR(b_sum, 1.0, 1e-12) << name;
+        for (int i = 0; i < S; ++i) {
+            double row_sum = 0;
+            for (int j = 0; j < S; ++j) { row_sum += tab.A()[i][j]; }
+            EXPECT_NEAR(row_sum, tab.c()[i], 1e-12) << name << " row " << i;
         }
-        EXPECT_EQ(T.is_explicit(), nt.is_explicit) << nt.name;
-    }
+        EXPECT_EQ(tab.is_explicit(), is_explicit) << name;
+    });
 }
 
 // empirical convergence order on a scalar linear ODE: halving dt should shrink the global
@@ -130,13 +128,13 @@ TEST(ode_test, convergence_order) {
     scalar_linear_field f {-1.0};
     const double t0 = 0.0, T = 1.0, y0 = 1.0;
     const double exact = y0 * std::exp(f.a * (T - t0));
-    for (const auto& nt : all_tableaux()) {
-        RKIntegrator integrator(nt.tableau);
+    for_each_scheme([&](const char* name, auto tab, int order, bool /*is_explicit*/) {
+        RKIntegrator integrator(tab);
         double err_coarse = std::abs(integrate_scalar(integrator, f, t0, T, 20, y0) - exact);
         double err_fine = std::abs(integrate_scalar(integrator, f, t0, T, 40, y0) - exact);
         double p_est = std::log2(err_coarse / err_fine);
-        EXPECT_NEAR(p_est, nt.order, 0.5) << nt.name << " (p_est = " << p_est << ")";
-    }
+        EXPECT_NEAR(p_est, order, 0.5) << name << " (p_est = " << p_est << ")";
+    });
 }
 
 // implicit one-step exactness on the linear test problem: a single GL2 step matches the
@@ -159,38 +157,38 @@ TEST(ode_test, jacobians_match_finite_differences) {
     vector_t y(2);
     y << 0.4, -0.6;
     const double t = 0.3, dt = 0.1;
-    for (const auto& nt : all_tableaux()) {
-        RKIntegrator integrator(nt.tableau);
+    for_each_scheme([&](const char* name, auto tab, int /*order*/, bool /*is_explicit*/) {
+        RKIntegrator integrator(tab);
 
         matrix_t flow_analytic = integrator.flow_jacobian(f, t, y, dt);
         matrix_t flow_fd = fd_jacobian([&](const vector_t& yy) { return integrator.step(f, t, yy, dt); }, y);
-        EXPECT_LT((flow_analytic - flow_fd).cwiseAbs().maxCoeff(), 1e-6) << "flow " << nt.name;
+        EXPECT_LT((flow_analytic - flow_fd).cwiseAbs().maxCoeff(), 1e-6) << "flow " << name;
 
         matrix_t incr_analytic = integrator.increment_jacobian(f, t, y, dt);
         matrix_t incr_fd = fd_jacobian([&](const vector_t& yy) { return integrator.increment(f, t, yy, dt); }, y);
-        EXPECT_LT((incr_analytic - incr_fd).cwiseAbs().maxCoeff(), 1e-6) << "increment " << nt.name;
-    }
+        EXPECT_LT((incr_analytic - incr_fd).cwiseAbs().maxCoeff(), 1e-6) << "increment " << name;
+    });
 }
 
-// fd_ode_field adaptor: its finite-difference Jacobian matches the analytic one, and it
-// satisfies the ode_field concept so it drives the integrator.
-TEST(ode_test, fd_ode_field_adaptor) {
-    nonlinear_field analytic;
-    auto bare = [](double t, const vector_t& y) {
+// the integrator accepts a bare callable f(t, y): the state dimension is read from y and the
+// Jacobian (needed by the implicit GL2 stage solve / sensitivities) falls back to finite
+// differences. No n_components()/df_dy required.
+TEST(ode_test, generic_callable_field) {
+    auto f = [](double t, const vector_t& y) {
         vector_t out(2);
         out << y[0] * y[1] + std::sin(t), y[0] - y[1] * y[1];
         return out;
     };
-    fd_ode_field fd_field(bare, 2);
-    static_assert(fdapde::is_ode_field<decltype(fd_field)>);
+    static_assert(fdapde::ode_rhs<decltype(f)>);
+    static_assert(!fdapde::provides_jacobian<decltype(f)>);
+    nonlinear_field analytic;   // same field, but with analytic Jacobian + n_components
 
     vector_t y(2);
     y << 0.4, -0.6;
-    const double t = 0.3;
-    EXPECT_LT((fd_field.df_dy(t, y) - analytic.df_dy(t, y)).cwiseAbs().maxCoeff(), 1e-6);
-
-    // the adaptor integrates to the same step as the analytic field
-    RKIntegrator integrator(ode_schemes::gauss_legendre_2());
-    const double dt = 0.1;
-    EXPECT_LT((integrator.step(fd_field, t, y, dt) - integrator.step(analytic, t, y, dt)).cwiseAbs().maxCoeff(), 1e-7);
+    const double t = 0.3, dt = 0.1;
+    RKIntegrator gl2(ode_schemes::gauss_legendre_2());   // implicit: exercises the Jacobian path
+    // the converged step is independent of how the Jacobian is obtained (same stage solution)
+    EXPECT_LT((gl2.step(f, t, y, dt) - gl2.step(analytic, t, y, dt)).cwiseAbs().maxCoeff(), 1e-10);
+    // the flow Jacobian via the FD fallback matches the analytic-field one
+    EXPECT_LT((gl2.flow_jacobian(f, t, y, dt) - gl2.flow_jacobian(analytic, t, y, dt)).cwiseAbs().maxCoeff(), 1e-5);
 }

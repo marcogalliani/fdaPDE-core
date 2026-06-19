@@ -506,8 +506,10 @@ class MatrixField :
         static constexpr bool value = (StaticInputSize_ == Dynamic || Rows_ == Dynamic || Cols_ == Dynamic);
     };
     using This = MatrixField<StaticInputSize_, Rows_, Cols_, FunctorType_>;
+    static constexpr std::size_t static_size_ =
+      is_dynamic_sized<This>::value ? 0 : static_cast<std::size_t>(Rows_ * Cols_);
     using StorageType = typename std::conditional<
-      is_dynamic_sized<This>::value, std::vector<FunctorType_>, std::array<FunctorType_, Rows_ * Cols_>>::type;
+      is_dynamic_sized<This>::value, std::vector<FunctorType_>, std::array<FunctorType_, static_size_>>::type;
     using Base = MatrixFieldBase<StaticInputSize_, MatrixField<StaticInputSize_, Rows_, Cols_, FunctorType_>>;
     using traits = internals::fn_ptr_traits<&FunctorType_::operator()>;
     fdapde_static_assert(traits::n_args == 1, PROVIDED_FUNCTOR_MUST_ACCEPT_ONLY_ONE_ARGUMENT);
