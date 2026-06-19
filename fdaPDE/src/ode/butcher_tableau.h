@@ -35,98 +35,88 @@ namespace fdapde {
 // be solved. Every scheme used by the ODE-penalty solvers (forward Euler, Crank-Nicolson /
 // implicit trapezoid, implicit midpoint = GL1, 2-stage Gauss-Legendre = GL2, ...) is a
 // single tableau, so one integrator implementation covers all of them.
-class ButcherTableau {
-   public:
-    using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
-    using vector_t = Eigen::Matrix<double, Dynamic, 1>;
+template <int Stages>
+struct ButcherTableau {
+    std::array<std::array<double, Stages>, Stages> A_ {};
+    std::array<double, Stages> b_ {}, c_ {};
+    bool is_explicit_ = false;
 
-    ButcherTableau() = default;
-    ButcherTableau(const matrix_t& A, const vector_t& b, const vector_t& c) : A_(A), b_(b), c_(c) {
-        n_stages_ = b_.size();
-        fdapde_assert(A_.rows() == n_stages_ && A_.cols() == n_stages_ && c_.size() == n_stages_);
+    // default (zero) tableau: a placeholder for default-constructed integrators/solvers, overwritten
+    // before use. The meaningful tableaux are built by the ode_schemes factory functions below.
+    constexpr ButcherTableau() = default;
+    constexpr ButcherTableau(
+        std::array<std::array<double, Stages>, Stages> A,
+        std::array<double, Stages> b,
+        std::array<double, Stages> c
+    ) : A_(A), b_(b), c_(c) {
         // detect explicit tableaux (A strictly lower triangular)
         is_explicit_ = true;
-        for (int i = 0; i < n_stages_ && is_explicit_; ++i) {
-            for (int j = i; j < n_stages_; ++j) {
-                if (A_(i, j) != 0.0) { is_explicit_ = false; break; }
+        for (int i = 0; i < Stages && is_explicit_; ++i) {
+            for (int j = i; j < Stages; ++j) {
+                if (A_[i][j] != 0.0) { is_explicit_ = false; break; }
             }
         }
     }
     // observers
-    int n_stages() const { return n_stages_; }
-    const matrix_t& A() const { return A_; }
-    const vector_t& b() const { return b_; }
-    const vector_t& c() const { return c_; }
-    bool is_explicit() const { return is_explicit_; }
-   private:
-    matrix_t A_;
-    vector_t b_, c_;
-    int n_stages_ = 0;
-    bool is_explicit_ = false;
+    static constexpr int n_stages() { return Stages; }
+    constexpr const std::array<std::array<double, Stages>, Stages>& A() const { return A_; }
+    constexpr const std::array<double, Stages>& b() const { return b_; }
+    constexpr const std::array<double, Stages>& c() const { return c_; }
+    constexpr bool is_explicit() const { return is_explicit_; }
 };
 
 // named tableaux ----------------------------------------------------------------------------
 namespace ode_schemes {
 
 // explicit Euler (order 1)
-inline ButcherTableau forward_euler() {
-    ButcherTableau::matrix_t A(1, 1);
-    ButcherTableau::vector_t b(1), c(1);
-    A << 0.0;
-    b << 1.0;
-    c << 0.0;
-    return ButcherTableau(A, b, c);
+inline constexpr ButcherTableau<1> forward_euler() {
+    return ButcherTableau<1>(
+        {{{0.0}}},  // A
+        {1.0},      // b
+        {0.0});     // c
 }
 // backward / implicit Euler (order 1)
-inline ButcherTableau backward_euler() {
-    ButcherTableau::matrix_t A(1, 1);
-    ButcherTableau::vector_t b(1), c(1);
-    A << 1.0;
-    b << 1.0;
-    c << 1.0;
-    return ButcherTableau(A, b, c);
+inline constexpr ButcherTableau<1> backward_euler() {
+    return ButcherTableau<1>(
+        {{{1.0}}},  // A
+        {1.0},      // b
+        {1.0});     // c
 }
 // Crank-Nicolson / implicit trapezoidal rule (order 2)
-inline ButcherTableau crank_nicolson() {
-    ButcherTableau::matrix_t A(2, 2);
-    ButcherTableau::vector_t b(2), c(2);
-    A << 0.0, 0.0,
-         0.5, 0.5;
-    b << 0.5, 0.5;
-    c << 0.0, 1.0;
-    return ButcherTableau(A, b, c);
+inline constexpr ButcherTableau<2> crank_nicolson() {
+    return ButcherTableau<2>(
+        {{{0.0, 0.0}, {0.5, 0.5}}},  // A
+        {0.5, 0.5},      // b
+        {0.0, 1.0});     // c
 }
 // implicit midpoint = 1-stage Gauss-Legendre, GL1 (order 2)
-inline ButcherTableau implicit_midpoint() {
-    ButcherTableau::matrix_t A(1, 1);
-    ButcherTableau::vector_t b(1), c(1);
-    A << 0.5;
-    b << 1.0;
-    c << 0.5;
-    return ButcherTableau(A, b, c);
+inline constexpr ButcherTableau<1> implicit_midpoint() {
+    return ButcherTableau<1>(
+        {{{0.5}}},  // A
+        {1.0},      // b
+        {0.5});     // c
 }
-// 2-stage Gauss-Legendre, GL2 (order 4)
-inline ButcherTableau gauss_legendre_2() {
+// 2-stage Gauss-Legendre, GL2 (order 4). Not constexpr: the nodes/weights involve std::sqrt, which
+// is not a constant expression in C++20 (the ButcherTableau itself is constexpr, just built at runtime).
+// TODO: make it constexpr
+inline ButcherTableau<2> gauss_legendre_2() {
     const double s3 = std::sqrt(3.0) / 6.0;
-    ButcherTableau::matrix_t A(2, 2);
-    ButcherTableau::vector_t b(2), c(2);
-    A << 0.25,      0.25 - s3,
-         0.25 + s3, 0.25;
-    b << 0.5, 0.5;
-    c << 0.5 - s3, 0.5 + s3;
-    return ButcherTableau(A, b, c);
+    return ButcherTableau<2>(
+        {{{0.25, 0.25 - s3}, {0.25 + s3, 0.25}}},   // A
+        {0.5, 0.5},                                 // b
+        {0.5 - s3, 0.5 + s3});                      // c
 }
 // classic explicit Runge-Kutta (order 4)
-inline ButcherTableau rk4() {
-    ButcherTableau::matrix_t A(4, 4);
-    ButcherTableau::vector_t b(4), c(4);
-    A.setZero();
-    A(1, 0) = 0.5;
-    A(2, 1) = 0.5;
-    A(3, 2) = 1.0;
-    b << 1.0 / 6.0, 1.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0;
-    c << 0.0, 0.5, 0.5, 1.0;
-    return ButcherTableau(A, b, c);
+inline constexpr ButcherTableau<4> rk4() {
+    return ButcherTableau<4>(
+        {{
+            {0.0, 0.0, 0.0, 0.0}, 
+            {0.5, 0.0, 0.0, 0.0},
+            {0.0, 0.5, 0.0, 0.0},
+            {0.0, 0.0, 1.0, 0.0}
+        }},  // A
+        {1.0 / 6.0, 1.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0},      // b
+        {0.0, 0.5, 0.5, 1.0});     // c
 }
 
 }   // namespace ode_schemes
