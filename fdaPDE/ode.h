@@ -23,6 +23,9 @@
 #include "linear_algebra.h"    // pull Eigen first
 #include "utility.h"
 
+// ode object
+#include "src/ode/ode.h"
+
 // time-integration primitives
 #include "src/ode/butcher_tableau.h"
 #include "src/ode/rk_integrator.h"

@@ -179,8 +179,8 @@ TEST(ode_test, generic_callable_field) {
         out << y[0] * y[1] + std::sin(t), y[0] - y[1] * y[1];
         return out;
     };
-    static_assert(fdapde::ode_rhs<decltype(f)>);
-    static_assert(!fdapde::provides_jacobian<decltype(f)>);
+    static_assert(fdapde::is_ode_rhs<decltype(f)>);
+    static_assert(!fdapde::has_jacobian<decltype(f)>);
     nonlinear_field analytic;   // same field, but with analytic Jacobian + n_components
 
     vector_t y(2);
