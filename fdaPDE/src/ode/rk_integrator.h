@@ -20,6 +20,7 @@
 #include <array>
 #include <functional>
 #include <memory>
+#include <tuple>
 #include <utility>
 
 #include "header_check.h"
@@ -121,6 +122,18 @@ class RKIntegrator {
       const F& f, double t, const vector_t& y, double dt) const {
         return step_with_flow_jacobian_(ode_rhs_field(f), t, y, dt);
     }
+    // forward step y_{n+1} together with BOTH its state (flow) Jacobian d y_{n+1}/d y and its control
+    // Jacobian d y_{n+1}/d u, from a single stage solve. The control u is a constant additive forcing of
+    // the dynamics over the interval (g = f + u); it enters every stage as k_i = f(t_i, arg_i) + u, so the
+    // control-sensitivity RHS is a stacked identity, the only difference from the state-sensitivity solve.
+    // (the forward-mode / tangent-linear counterpart of adjoint_step: it returns the Jacobian matrices
+    // themselves, not their transposed action on a costate.)
+    template <typename F>
+        requires(is_ode_rhs<F>)
+    std::tuple<vector_t, matrix_t, matrix_t> step_with_jacobians(
+      const F& f, double t, const vector_t& y, double dt) const {
+        return step_with_jacobians_(ode_rhs_field(f), t, y, dt);
+    }
     // discrete adjoint of one forward step. Inputs: the field f (the dynamics already shifted by the
     // interval control, if any), the step (t, y, dt) of the *forward* trajectory, and the incoming
     // costate p_next = dC/dy_{n+1}. Returns {p_curr, grad_contrib} with
@@ -195,6 +208,35 @@ class RKIntegrator {
         matrix_t dphi = matrix_t::Zero(d, d);
         for (int i = 0; i < ns; ++i) { dphi += tableau_.b()[i] * S.block(i * d, 0, d, d); }
         return {y + dt * phi, matrix_t::Identity(d, d) + dt * dphi};
+    }
+    // forward step plus state and control Jacobians. Reuses the single stage-system factorization G for
+    // two block solves: S_y = dK/dy from G S_y = [J_1; ...; J_s] (flow = I + dt sum b_i S_y,i) and
+    // S_u = dK/du from G S_u = [I; ...; I] (control jac = dt sum b_i S_u,i, since each k_i carries +u).
+    template <typename Field>
+    std::tuple<vector_t, matrix_t, matrix_t> step_with_jacobians_(
+      const Field& f, double t, const vector_t& y, double dt) const {
+        using ST = stage_types<Field>;
+        const int d = y.size(), ns = Stages;
+        auto K = solve_stages_(f, t, y, dt);
+        vector_t phi = vector_t::Zero(d);
+        for (int i = 0; i < ns; ++i) { phi += tableau_.b()[i] * K.segment(i * d, d); }
+        typename ST::jac_array J;
+        typename ST::stage_lu G;
+        stage_jacobians_(f, t, y, dt, K, J, G);
+        const matrix_t Id = matrix_t::Identity(d, d);
+        matrix_t rhs_y(ns * d, d), rhs_u(ns * d, d);
+        for (int i = 0; i < ns; ++i) {
+            rhs_y.block(i * d, 0, d, d) = J[i];
+            rhs_u.block(i * d, 0, d, d) = Id;
+        }
+        matrix_t Sy = G.solve(rhs_y);   // (ns*d) x d, S_y,i = dk_i/dy
+        matrix_t Su = G.solve(rhs_u);   // (ns*d) x d, S_u,i = dk_i/du
+        matrix_t dphi_y = matrix_t::Zero(d, d), dphi_u = matrix_t::Zero(d, d);
+        for (int i = 0; i < ns; ++i) {
+            dphi_y += tableau_.b()[i] * Sy.block(i * d, 0, d, d);
+            dphi_u += tableau_.b()[i] * Su.block(i * d, 0, d, d);
+        }
+        return {y + dt * phi, Id + dt * dphi_y, dt * dphi_u};
     }
     // exact discrete adjoint of one RK step. Recovers the forward stages and their Jacobians
     // J_i = df_dy(t + c_i dt, Y_i), then solves the stage-adjoint block system
