@@ -134,6 +134,17 @@ class RKIntegrator {
       const F& f, double t, const vector_t& y, double dt) const {
         return step_with_jacobians_(ode_rhs_field(f), t, y, dt);
     }
+    // parameter sensitivity of one step, d y_{n+1}/d theta (d x n_theta), for dynamics
+    // y' = f(t, y, theta) (+ control). f is the already theta-bound and control-forced field, while
+    // df_dtheta(t, y) -> R^{d x n_theta} supplies the parameter Jacobian of the *unforced* dynamics (the
+    // control is theta-independent). Same stage machinery as step_with_jacobians: the stage system is
+    // solved once and its Jacobian reused, only the sensitivity right-hand side changes.
+    template <typename F, typename DFDTheta>
+        requires(is_ode_rhs<F>)
+    matrix_t step_param_jacobian(
+      const F& f, double t, const vector_t& y, double dt, const DFDTheta& df_dtheta, int n_theta) const {
+        return step_param_jacobian_(ode_rhs_field(f), t, y, dt, df_dtheta, n_theta);
+    }
     // discrete adjoint of one forward step. Inputs: the field f (the dynamics already shifted by the
     // interval control, if any), the step (t, y, dt) of the *forward* trajectory, and the incoming
     // costate p_next = dC/dy_{n+1}. Returns {p_curr, grad_contrib} with
@@ -237,6 +248,30 @@ class RKIntegrator {
             dphi_u += tableau_.b()[i] * Su.block(i * d, 0, d, d);
         }
         return {y + dt * phi, Id + dt * dphi_y, dt * dphi_u};
+    }
+    // parameter sensitivity of one step. Since each stage carries the parameter through the dynamics,
+    // k_i = f(t_i, arg_i, theta) (+ u), the stage sensitivities S_theta = dK/dtheta solve the same stage
+    // system with the stacked parameter Jacobians as right-hand side:
+    //   G S_theta = [df/dtheta(t_1, arg_1); ...; df/dtheta(t_s, arg_s)],
+    //   d y_{n+1}/d theta = dt * sum_i b_i S_theta,i.
+    template <typename Field, typename DFDTheta>
+    matrix_t step_param_jacobian_(
+      const Field& f, double t, const vector_t& y, double dt, const DFDTheta& df_dtheta, int n_theta) const {
+        using ST = stage_types<Field>;
+        const int d = y.size(), ns = Stages;
+        auto K = solve_stages_(f, t, y, dt);
+        typename ST::jac_array J;
+        typename ST::stage_lu G;
+        stage_jacobians_(f, t, y, dt, K, J, G);
+        matrix_t rhs(ns * d, n_theta);
+        for (int i = 0; i < ns; ++i) {
+            rhs.block(i * d, 0, d, n_theta) =
+              df_dtheta(t + tableau_.c()[i] * dt, stage_arg_(y, K, dt, i, d));
+        }
+        matrix_t S = G.solve(rhs);   // (ns*d) x n_theta, S_i = dk_i/dtheta
+        matrix_t dphi = matrix_t::Zero(d, n_theta);
+        for (int i = 0; i < ns; ++i) { dphi += tableau_.b()[i] * S.block(i * d, 0, d, n_theta); }
+        return dt * dphi;
     }
     // exact discrete adjoint of one RK step. Recovers the forward stages and their Jacobians
     // J_i = df_dy(t + c_i dt, Y_i), then solves the stage-adjoint block system

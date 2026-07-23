@@ -163,6 +163,86 @@ class ode_rhs_field :
 // deduce Dim from the wrapped functor: a fixed-size return type -> static Dim, VectorXd -> Dynamic
 template <typename F> ode_rhs_field(F&&) -> ode_rhs_field<ode_rhs_dim_v<F>>;
 
+// --- theta-parameterized right-hand sides -------------------------------------------------------
+// The inverse (parameter-estimation) solvers need dynamics whose coefficients are themselves the
+// unknowns: y' = f(t, y, theta). Such a field is not a drop-in ode_rhs (which is a 2-argument
+// callable), so it is described by its own concepts and bound to a concrete theta on demand; the
+// bound object is an ordinary ode_rhs and flows through the existing integrator / engine untouched.
+
+// f models a theta-parameterized ODE rhs: callable as f(t, y, theta) -> R^d.
+template <typename F>
+concept is_ode_param_rhs = std::is_invocable_r_v<
+  Eigen::Matrix<double, Dynamic, 1>, const F&, double, const Eigen::Matrix<double, Dynamic, 1>&,
+  const Eigen::Matrix<double, Dynamic, 1>&>;
+
+// f additionally exposes the analytic state Jacobian df_dy(t, y, theta) -> R^{d x d}
+template <typename F>
+concept has_param_state_jacobian = requires(
+  const F& f, double t, const Eigen::Matrix<double, Dynamic, 1>& y, const Eigen::Matrix<double, Dynamic, 1>& th) {
+    { f.df_dy(t, y, th) } -> std::convertible_to<Eigen::Matrix<double, Dynamic, Dynamic>>;
+};
+// f additionally exposes the analytic parameter Jacobian df_dtheta(t, y, theta) -> R^{d x n_theta};
+// when absent the parameter sensitivity falls back to central finite differences (param_jacobian_fd)
+template <typename F>
+concept has_param_jacobian = requires(
+  const F& f, double t, const Eigen::Matrix<double, Dynamic, 1>& y, const Eigen::Matrix<double, Dynamic, 1>& th) {
+    { f.df_dtheta(t, y, th) } -> std::convertible_to<Eigen::Matrix<double, Dynamic, Dynamic>>;
+};
+
+// system dimension of a parametric rhs, read statically from its return type (mirrors ode_rhs_dim):
+// a fixed-size return gives a static Dim, a VectorXd return gives Dynamic.
+template <typename F> constexpr int ode_rhs_param_dim() {
+    using G = std::decay_t<F>;
+    if constexpr (requires { G::dim; }) {
+        return G::dim;
+    } else {
+        return std::invoke_result_t<
+          G, double, Eigen::Matrix<double, Dynamic, 1>, Eigen::Matrix<double, Dynamic, 1>>::RowsAtCompileTime;
+    }
+}
+template <typename F> inline constexpr int ode_rhs_param_dim_v = ode_rhs_param_dim<F>();
+
+// binds a fixed theta into a parametric rhs, yielding a plain (t, y) ODE rhs that ode_rhs_field and the
+// integrator consume as usual. df_dy is forwarded only when the parametric functor supplies one, so
+// ode_rhs_field's has_jacobian detection (hence its analytic-vs-finite-difference choice) still applies.
+template <typename F> struct theta_bound_rhs {
+    using vector_t = Eigen::Matrix<double, Dynamic, 1>;
+    using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
+    F f_;
+    vector_t theta_;
+
+    auto operator()(double t, const vector_t& y) const { return f_(t, y, theta_); }
+    matrix_t df_dy(double t, const vector_t& y) const
+        requires(has_param_state_jacobian<F>)
+    {
+        return f_.df_dy(t, y, theta_);
+    }
+};
+
+// central finite-difference df/dtheta (d x n_theta): the fallback used when the parametric rhs carries
+// no analytic df_dtheta. Step per component scaled to the parameter magnitude.
+template <typename F>
+    requires(is_ode_param_rhs<F>)
+Eigen::Matrix<double, Dynamic, Dynamic> param_jacobian_fd(
+  const F& f, double t, const Eigen::Matrix<double, Dynamic, 1>& y,
+  const Eigen::Matrix<double, Dynamic, 1>& theta) {
+    using vector_t = Eigen::Matrix<double, Dynamic, 1>;
+    using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
+    const int n_theta = theta.size();
+    const vector_t f0 = f(t, y, theta);
+    matrix_t J(f0.size(), n_theta);
+    vector_t thp = theta, thm = theta;
+    for (int k = 0; k < n_theta; ++k) {
+        const double h = 1e-6 * std::max(1.0, std::abs(theta[k]));
+        thp[k] = theta[k] + h;
+        thm[k] = theta[k] - h;
+        J.col(k) = (f(t, y, thp) - f(t, y, thm)) / (2 * h);
+        thp[k] = theta[k];
+        thm[k] = theta[k];
+    }
+    return J;
+}
+
 } // namespace fdapde
 
 #endif //__ODE_H__
