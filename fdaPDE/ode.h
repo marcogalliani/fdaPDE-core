@@ -23,12 +23,18 @@
 #include "linear_algebra.h"    // pull Eigen first
 #include "utility.h"
 
-// ode object
-#include "src/ode/ode.h"
+// ode right-hand side (concepts, field wrapper, theta-parameterized dynamics)
+#include "src/ode/ode_rhs.h"
 
 // time-integration primitives
 #include "src/ode/butcher_tableau.h"
 #include "src/ode/rk_integrator.h"
+
+// general-purpose ode solver (forward integration + sensitivities)
+#include "src/ode/ode_solver.h"
+
+// control-aware ode solver (additive-control forcing + type-erased engine)
+#include "src/ode/controlled_ode_solver.h"
 
 // clang-format on
 

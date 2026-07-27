@@ -21,6 +21,7 @@
 #include <fdaPDE/ode.h>
 
 using fdapde::ButcherTableau;
+using fdapde::ode_rhs_field;
 using fdapde::RKIntegrator;
 namespace ode_schemes = fdapde::ode_schemes;
 
@@ -38,7 +39,7 @@ struct scalar_linear_field {
         out << a * y[0];
         return out;
     }
-    matrix_t df_dy(double, const vector_t&) const {
+    matrix_t state_jacobian(double, const vector_t&) const {
         matrix_t J(1, 1);
         J << a;
         return J;
@@ -47,7 +48,7 @@ struct scalar_linear_field {
 
 // nonlinear, non-autonomous field with analytic Jacobian:
 //   f(t, y) = [ y0*y1 + sin(t) ; y0 - y1^2 ]
-//   df_dy   = [ [ y1, y0 ] ; [ 1, -2*y1 ] ]
+//   state_jacobian   = [ [ y1, y0 ] ; [ 1, -2*y1 ] ]
 struct nonlinear_field {
     int n_components() const { return 2; }
     vector_t operator()(double t, const vector_t& y) const {
@@ -55,7 +56,7 @@ struct nonlinear_field {
         out << y[0] * y[1] + std::sin(t), y[0] - y[1] * y[1];
         return out;
     }
-    matrix_t df_dy(double, const vector_t& y) const {
+    matrix_t state_jacobian(double, const vector_t& y) const {
         matrix_t J(2, 2);
         J << y[1], y[0], 1.0, -2.0 * y[1];
         return J;
@@ -84,8 +85,9 @@ double integrate_scalar(const RKIntegrator<Stages>& integrator, const scalar_lin
     vector_t y(1);
     y << y0;
     double t = t0;
+    ode_rhs_field field {f};
     for (int k = 0; k < n; ++k) {
-        y = integrator.step(f, t, y, dt);
+        y = integrator.step(field, t, y, dt);
         t += dt;
     }
     return y[0];
@@ -146,7 +148,7 @@ TEST(ode_test, single_step_linear) {
     const double dt = 0.1;
     const double exact = std::exp(f.a * dt);
     RKIntegrator gl2(ode_schemes::gauss_legendre_2());
-    double y_next = gl2.step(f, 0.0, y, dt)[0];
+    double y_next = gl2.step(ode_rhs_field {f}, 0.0, y, dt)[0];
     EXPECT_NEAR(y_next, exact, 1e-8);
 }
 
@@ -154,25 +156,26 @@ TEST(ode_test, single_step_linear) {
 // the corresponding maps, for every tableau, on the nonlinear field.
 TEST(ode_test, jacobians_match_finite_differences) {
     nonlinear_field f;
+    ode_rhs_field field {f};
     vector_t y(2);
     y << 0.4, -0.6;
     const double t = 0.3, dt = 0.1;
     for_each_scheme([&](const char* name, auto tab, int /*order*/, bool /*is_explicit*/) {
         RKIntegrator integrator(tab);
 
-        matrix_t flow_analytic = integrator.flow_jacobian(f, t, y, dt);
-        matrix_t flow_fd = fd_jacobian([&](const vector_t& yy) { return integrator.step(f, t, yy, dt); }, y);
+        matrix_t flow_analytic = integrator.flow_jacobian(field, t, y, dt);
+        matrix_t flow_fd = fd_jacobian([&](const vector_t& yy) { return integrator.step(field, t, yy, dt); }, y);
         EXPECT_LT((flow_analytic - flow_fd).cwiseAbs().maxCoeff(), 1e-6) << "flow " << name;
 
-        matrix_t incr_analytic = integrator.increment_jacobian(f, t, y, dt);
-        matrix_t incr_fd = fd_jacobian([&](const vector_t& yy) { return integrator.increment(f, t, yy, dt); }, y);
+        matrix_t incr_analytic = integrator.increment_jacobian(field, t, y, dt);
+        matrix_t incr_fd = fd_jacobian([&](const vector_t& yy) { return integrator.increment(field, t, yy, dt); }, y);
         EXPECT_LT((incr_analytic - incr_fd).cwiseAbs().maxCoeff(), 1e-6) << "increment " << name;
     });
 }
 
 // the integrator accepts a bare callable f(t, y): the state dimension is read from y and the
 // Jacobian (needed by the implicit GL2 stage solve / sensitivities) falls back to finite
-// differences. No n_components()/df_dy required.
+// differences. No n_components()/state_jacobian required.
 TEST(ode_test, generic_callable_field) {
     auto f = [](double t, const vector_t& y) {
         vector_t out(2);
@@ -180,15 +183,17 @@ TEST(ode_test, generic_callable_field) {
         return out;
     };
     static_assert(fdapde::is_ode_rhs<decltype(f)>);
-    static_assert(!fdapde::has_jacobian<decltype(f)>);
+    static_assert(!fdapde::ode_rhs_has_state_jacobian<decltype(f)>);
     nonlinear_field analytic;   // same field, but with analytic Jacobian + n_components
 
     vector_t y(2);
     y << 0.4, -0.6;
     const double t = 0.3, dt = 0.1;
     RKIntegrator gl2(ode_schemes::gauss_legendre_2());   // implicit: exercises the Jacobian path
+    ode_rhs_field field {f};                     // bare lambda -> finite-difference state Jacobian
+    ode_rhs_field analytic_field {analytic};     // same dynamics, analytic state Jacobian
     // the converged step is independent of how the Jacobian is obtained (same stage solution)
-    EXPECT_LT((gl2.step(f, t, y, dt) - gl2.step(analytic, t, y, dt)).cwiseAbs().maxCoeff(), 1e-10);
+    EXPECT_LT((gl2.step(field, t, y, dt) - gl2.step(analytic_field, t, y, dt)).cwiseAbs().maxCoeff(), 1e-10);
     // the flow Jacobian via the FD fallback matches the analytic-field one
-    EXPECT_LT((gl2.flow_jacobian(f, t, y, dt) - gl2.flow_jacobian(analytic, t, y, dt)).cwiseAbs().maxCoeff(), 1e-5);
+    EXPECT_LT((gl2.flow_jacobian(field, t, y, dt) - gl2.flow_jacobian(analytic_field, t, y, dt)).cwiseAbs().maxCoeff(), 1e-5);
 }
