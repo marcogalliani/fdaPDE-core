@@ -21,11 +21,14 @@
 
 namespace fdapde {
 
-// A constant additive control u expressed as an ODE rhs g(t, y) = u, with state Jacobian d g/d y = 0. The
-// control-forced dynamics f + u are formed by adding this to the prior field through ode_rhs_field's
-// field-field addition (the only place the f + u control specialization is expressed). The zero
-// state_jacobian keeps the sum's state Jacobian analytic whenever the prior field's is.
-struct constant_rhs {
+/* Additive control term in an ODE rhs field
+A constant additive control u, of the form d y / d t = f(t, y) + u(t) expressed as an ODE rhs field g(t, y) = u,
+with state Jacobian d g/d y = 0.
+
+Locality invariant: this term represents the control u(.) *on a single step* only. operator() returns the same u for every t, so as a standalone object it stands for "u constant for all time" -- which is a faithful model of u(.) solely for t in the current step [t_k, t_{k+1}] (where a piecewise-constant control is genuinely constant). It is built as a private per-step temporary inside controlled_ode_solver::forced_solver_ and is only ever evaluated at that step's RK stage times (c_i in [0, 1]), so the "constant for all t" reading is never exercised outside its interval of validity. Do not integrate it across more than one interval.
+*/
+template<int Dim>
+struct ode_rhs_control_term {
     Eigen::Matrix<double, Dynamic, 1> u;
     Eigen::Matrix<double, Dynamic, 1> operator()(double, const Eigen::Matrix<double, Dynamic, 1>&) const {
         return u;
@@ -57,23 +60,41 @@ struct controlled_ode_solver {
     vector_t step(double t, const vector_t& y, double dt, const vector_t& u) const {
         return forced_solver_(u).step(t, y, dt);
     }
+    // full-horizon controlled forward solve: from y0, integrate the forced dynamics f + u_t over each
+    // interval of `times` under a piecewise-constant control schedule U ((m-1) x d, row t is the control on
+    // [times_t, times_{t+1}]). Returns the nodal trajectory Y (m x d).
+    matrix_t solve(const vector_t& times, const vector_t& y0, const matrix_t& U) const {
+        const int m = times.size(), d = y0.size();
+        fdapde_assert(m >= 1 && d > 0 && U.rows() == m - 1);
+        matrix_t Y(m, d);
+        Y.row(0) = y0.transpose();
+        for (int t = 0; t + 1 < m; ++t) {
+            vector_t yc = Y.row(t).transpose();
+            Y.row(t + 1) = step(times[t], yc, times[t + 1] - times[t], U.row(t).transpose()).transpose();
+        }
+        return Y;
+    }
     // forced discrete adjoint of one step: u is the constant additive control on the interval, p_next
     // the incoming costate; returns {p_curr, dC/du}. The control is the special case of a parameter with
     // an identity Jacobian (d f/d u = I), so dC/du is the core adjoint's parameter gradient under that map.
-    std::pair<vector_t, vector_t> adjoint_step(
+    rk_adj_step_t adjoint_step(
       double t, const vector_t& y, double dt, const vector_t& p_next, const vector_t& u) const {
+        // trick: the same lower-level utility to compute the gradient w.r.t. parameters is used for
+        // the gradient w.r.t. control
         return forced_solver_(u).adjoint_step(t, y, dt, p_next, identity_df_du_(y.size()));
     }
     // unforced step together with the flow Jacobian of the prior dynamics (no control); used by edf()
-    std::pair<vector_t, matrix_t> step_with_flow_jacobian(double t, const vector_t& y, double dt) const {
+    rk_fwd_step_t step_with_flow_jacobian(double t, const vector_t& y, double dt) const {
         return solver_.step_with_flow_jacobian(t, y, dt);
     }
     // forced step together with its state (flow) and control Jacobians (control-aware; u = 0 recovers the
     // prior dynamics). The forward-mode primitive the full-space SQP solver assembles its KKT system from.
     // The control Jacobian d y_{n+1}/d u is the core parameter Jacobian under the identity map d f/d u = I.
-    std::tuple<vector_t, matrix_t, matrix_t> step_with_jacobians(
+    rk_fwd_step_t step_with_jacobians(
       double t, const vector_t& y, double dt, const vector_t& u) const {
         const int d = y.size();
+        // trick: the same lower-level utility to compute the gradient w.r.t. parameters is used for
+        // the gradient w.r.t. control
         return forced_solver_(u).step_with_state_param_jacobians(t, y, dt, identity_df_du_(d), d);
     }
     // forced parameter sensitivity: d y_{n+1}/d theta on the control-forced dynamics f + u for a
@@ -85,6 +106,23 @@ struct controlled_ode_solver {
       double t, const vector_t& y, double dt, const vector_t& u, const ParamJacobian& param_jacobian,
       int n_theta) const {
         return forced_solver_(u).step_param_jacobian(t, y, dt, param_jacobian, n_theta);
+    }
+    // forced step together with BOTH its flow Jacobian d y_{n+1}/d y and its theta-parameter Jacobian
+    // d y_{n+1}/d theta, from a SINGLE stage solve, using the field's own parameter Jacobian. The theta-analogue
+    // of step_with_jacobians (which uses the identity control map for d y/d u): the tracking envelope gradient
+    // needs, per interval, the state-transition matrix for the costate propagation and the parameter
+    // sensitivity for grad_theta -- one shared stage factorization yields both instead of a separate
+    // param_jacobian and adjoint_step. The concrete (non-templated) counterpart of step_param_jacobian, so it
+    // crosses the type-erasure boundary.
+    rk_fwd_step_t step_with_flow_param_jacobians(double t, const vector_t& y, double dt, const vector_t& u) const {
+        if constexpr (ode_rhs_field<Dim, F>::is_parametric()) {
+            return forced_solver_(u).step_with_state_param_jacobians(
+              t, y, dt, [this](double tt, const vector_t& yy) { return solver_.field().param_jacobian(tt, yy); },
+              solver_.field().n_params());
+        } else {
+            fdapde_assert(false && "step_with_flow_param_jacobians called on a non-parametric controlled_ode_solver");
+            return rk_fwd_step_t {};
+        }
     }
 
     // Parametric operations (meaningful when the prior field is theta-parameterized; the type-erased
@@ -119,9 +157,14 @@ struct controlled_ode_solver {
     // analytic Jacobians). The RKIntegrator is a fixed-size tableau, so this per-call solver is a trivially
     // copied stack temporary handed straight to the forced-dynamics step -- the same object the control-free
     // ode_solver drives, only over f + u instead of f.
+    // This is a PER-STEP LOCAL object, valid only for tau in [t, t+dt]: the control term holds u constant
+    // for all tau, which is exact on this interval (piecewise-constant control) and never evaluated outside
+    // it. It must stay private -- exposing it would let a caller integrate a single u across several
+    // intervals, where the constant would be the wrong control on all but the first.
     auto forced_solver_(const vector_t& u) const {
         return ode_solver(
-          solver_.field() + ode_rhs_field<Dim, constant_rhs>(constant_rhs {u}), solver_.integrator());
+          solver_.field() + ode_rhs_field<Dim, ode_rhs_control_term<Dim>>(ode_rhs_control_term<Dim> {u}),
+          solver_.integrator());
     }
     // the additive control enters the dynamics as g = f + u, i.e. as a parameter u with d g/d u = I. This
     // is the identity parameter map the core integrator consumes to yield the control Jacobian / dC/du,
@@ -142,25 +185,31 @@ struct IControlledOdeSolver {
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
     template <typename T> using fn_ptrs =
       fdapde::bindings<&T::step, &T::adjoint_step, &T::step_with_flow_jacobian, &T::step_with_jacobians,
-                       &T::set_theta, &T::n_params, &T::param_jacobian>;
+                       &T::set_theta, &T::n_params, &T::param_jacobian, &T::solve,
+                       &T::step_with_flow_param_jacobians>;
     vector_t step(double t, const vector_t& y, double dt, const vector_t& u) const {
         return fdapde::invoke<vector_t, 0>(*this, t, y, dt, u);
     }
-    std::pair<vector_t, vector_t> adjoint_step(
+    matrix_t solve(const vector_t& times, const vector_t& y0, const matrix_t& U) const {
+        return fdapde::invoke<matrix_t, 7>(*this, times, y0, U);
+    }
+    rk_adj_step_t adjoint_step(
       double t, const vector_t& y, double dt, const vector_t& p_next, const vector_t& u) const {
-        return fdapde::invoke<std::pair<vector_t, vector_t>, 1>(*this, t, y, dt, p_next, u);
+        return fdapde::invoke<rk_adj_step_t, 1>(*this, t, y, dt, p_next, u);
     }
-    std::pair<vector_t, matrix_t> step_with_flow_jacobian(double t, const vector_t& y, double dt) const {
-        return fdapde::invoke<std::pair<vector_t, matrix_t>, 2>(*this, t, y, dt);
+    rk_fwd_step_t step_with_flow_jacobian(double t, const vector_t& y, double dt) const {
+        return fdapde::invoke<rk_fwd_step_t, 2>(*this, t, y, dt);
     }
-    std::tuple<vector_t, matrix_t, matrix_t> step_with_jacobians(
-      double t, const vector_t& y, double dt, const vector_t& u) const {
-        return fdapde::invoke<std::tuple<vector_t, matrix_t, matrix_t>, 3>(*this, t, y, dt, u);
+    rk_fwd_step_t step_with_jacobians(double t, const vector_t& y, double dt, const vector_t& u) const {
+        return fdapde::invoke<rk_fwd_step_t, 3>(*this, t, y, dt, u);
     }
     void set_theta(const vector_t& theta) { fdapde::invoke<void, 4>(*this, theta); }
     int n_params() const { return fdapde::invoke<int, 5>(*this); }
     matrix_t param_jacobian(double t, const vector_t& y, double dt, const vector_t& u) const {
         return fdapde::invoke<matrix_t, 6>(*this, t, y, dt, u);
+    }
+    rk_fwd_step_t step_with_flow_param_jacobians(double t, const vector_t& y, double dt, const vector_t& u) const {
+        return fdapde::invoke<rk_fwd_step_t, 8>(*this, t, y, dt, u);
     }
 };
 
