@@ -26,8 +26,9 @@
 #include "header_check.h"
 
 namespace fdapde {
-    
-/* Generic Runge-Kutta integrator driven by a ButcherTableau. 
+
+
+/* Generic Runge-Kutta integrator driven by a ButcherTableau.
 A single implementation covers explicit and implicit methods: explicit tableaux evaluate the stages by forward substitution, implicit ones solve the coupled stage system by Newton's method. 
 
 Besides the forward step it exposes the local sensitivities of one step, which are needed by the ODE smoothing solvers:
@@ -46,6 +47,26 @@ Besides the forward step it exposes the local sensitivities of one step, which a
 
 The stage math is fixed-size when the field carries a static dimension (ode_rhs_field<Dim>): each method reads the dimension off the field type (stage_types<Field>) and uses Eigen objects of size Stages*Dim, so the Newton / sensitivity / adjoint solves allocate no heap and the loops unroll. For Dim = Dynamic the same code falls back to dynamically-sized Eigen. 
  */
+
+
+// Composite results of the RK single-step utilities, returned by value as named aggregates so a caller reads
+// r.state / r.flow / r.param. 
+
+// a forward step together with its state-transition (flow) Jacobian and, optionally, a parameter (or
+// control) Jacobian -- param is left empty when only the flow is requested (step_with_flow_jacobian).
+struct rk_fwd_step_t {
+    Eigen::Matrix<double, Dynamic, 1> state;        // y_{n+1}
+    Eigen::Matrix<double, Dynamic, Dynamic> flow;   // d y_{n+1} / d y_n
+    Eigen::Matrix<double, Dynamic, Dynamic> param;  // d y_{n+1} / d theta  (d y_{n+1}/d u for a control); empty if unset
+};
+// the discrete adjoint of one step: the propagated costate and, optionally, the parameter (or control) cost
+// gradient -- param_grad is left empty when only the costate is requested.
+struct rk_adj_step_t {
+    Eigen::Matrix<double, Dynamic, 1> costate;      // p_curr = dC / dy_n
+    Eigen::Matrix<double, Dynamic, 1> param_grad;   // dC / dtheta  (dC/du for a control); empty if unset
+};
+
+
 template <int Stages>
 class RKIntegrator {
    public:
@@ -75,7 +96,7 @@ class RKIntegrator {
     }
     // full-horizon forward integration of y' = f(t, y) on the grid `times` from y0: chains step over the
     // intervals and returns the nodal trajectory Y (m x d). This is the general IVP solve on a fixed time
-    // grid, built on the single-step utilities; it has no notion of any cost/objective.
+    // grid, built on the single-step utilities.
     template <int Dim, typename F>
     matrix_t integrate(const ode_rhs_field<Dim, F>& f, const vector_t& times, const vector_t& y0) const {
         const int m = times.size(), d = y0.size();
@@ -122,9 +143,8 @@ class RKIntegrator {
     }
     // forward step y_{n+1} together with its flow Jacobian d y_{n+1}/d y, from a single stage
     // solve (the combination a time-stepping smoother needs once per interval).
-    // TODO: better naming than step_with_flow_jacobian 
     template <int Dim, typename F>
-    std::pair<vector_t, matrix_t> step_with_flow_jacobian(
+    rk_fwd_step_t step_with_flow_jacobian(
       const ode_rhs_field<Dim, F>& f, double t, const vector_t& y, double dt) const {
         using Field = ode_rhs_field<Dim, F>;
         using ST = stage_types<Field>;
@@ -140,18 +160,13 @@ class RKIntegrator {
         matrix_t S = G.solve(rhs);
         matrix_t dphi = matrix_t::Zero(d, d);
         for (int i = 0; i < ns; ++i) { dphi += tableau_.b()[i] * S.block(i * d, 0, d, d); }
-        return {y + dt * phi, matrix_t::Identity(d, d) + dt * dphi};
+        return {y + dt * phi, matrix_t::Identity(d, d) + dt * dphi, {}};   // param left empty (flow only)
     }
     // forward step y_{n+1} together with BOTH its state (flow) Jacobian d y_{n+1}/d y and its parameter
-    // Jacobian d y_{n+1}/d theta (d x n_theta), from a single stage solve. param_jacobian(t, y) -> R^{d x n_theta}
-    // is the parameter Jacobian of the dynamics; the two sensitivity right-hand sides (per-stage state
-    // Jacobians for the flow block, per-stage param_jacobian for the parameter block) share the one factorized
-    // stage system. (the forward-mode / tangent-linear counterpart of adjoint_step: it returns the Jacobian
-    // matrices themselves, not their transposed action on a costate.) A constant additive forcing g = f + u
-    // is the special case param_jacobian = I (n_theta = d): passing an identity map yields d y_{n+1}/d u.
-    template <int Dim, typename F, typename ParamJacobina>
-    std::tuple<vector_t, matrix_t, matrix_t> step_with_state_param_jacobians(
-      const ode_rhs_field<Dim, F>& f, double t, const vector_t& y, double dt, const ParamJacobina& param_jacobian, int n_theta) const {
+    // Jacobian d y_{n+1}/d theta (d x n_theta), from a single stage solve. 
+    template <int Dim, typename F, typename ParamJacobian>
+    rk_fwd_step_t step_with_state_param_jacobians(
+      const ode_rhs_field<Dim, F>& f, double t, const vector_t& y, double dt, const ParamJacobian& param_jacobian, int n_theta) const {
         // Reuses the single stage-system factorization G for two block solves: S_y = dK/dy from
         // G S_y = [J_1; ...; J_s] (flow = I + dt sum b_i S_y,i) and S_theta = dK/dtheta from
         // G S_theta = [param_jacobian_1; ...; param_jacobian_s] (param jac = dt sum b_i S_theta,i).
@@ -183,6 +198,7 @@ class RKIntegrator {
     // y' = f(t, y, theta). f is the already theta-bound field and param_jacobian(t, y) -> R^{d x n_theta} its
     // parameter Jacobian. Same stage machinery as step_with_state_param_jacobians: the stage system is
     // solved once and its Jacobian reused, only the sensitivity right-hand side changes.
+    // TODO: check if really needed
     template <int Dim, typename F, typename ParamJacobian>
     matrix_t step_param_jacobian(
       const ode_rhs_field<Dim, F>& f, double t, const vector_t& y, double dt, const ParamJacobian& param_jacobian, int n_theta) const {
@@ -216,7 +232,7 @@ class RKIntegrator {
     // formed as sum_i (param_jacobian(t_i, arg_i))^T lam_i from the same stage adjoints lam_i. A constant additive
     // forcing g = f + u is the special case param_jacobian = I (n_theta = d): an identity map yields dC/du = sum_i lam_i.
     template <int Dim, typename F, typename ParamJacobian>
-    std::pair<vector_t, vector_t> adjoint_step(
+    rk_adj_step_t adjoint_step(
       const ode_rhs_field<Dim, F>& f, double t, const vector_t& y, double dt, const vector_t& p_next, const ParamJacobian& param_jacobian) const {
         // dC/dtheta = sum_i (param_jacobian(t_i, arg_i))^T lam_i, from the same stage adjoints lam_i
         const int d = y.size(), ns = Stages;

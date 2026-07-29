@@ -17,7 +17,7 @@
 #ifndef __ODE_RHS_H__
 #define __ODE_RHS_H__
 
-/* File Description
+/* ODE RHS field, f(t,x) (as in dx/dt = f(t,x))
 This file implements a set of abstractions to represent systems of first-order Ordinary Differential Equations (ODEs). As only first-order ODE systems of the form dx/dt = f(t,x) are represented throughout the library, ODEs can be identified by their righ-hand side field. The choice of considering only first-order ODEs may appear limiting, but higher order ODEs can be encoded in a first-order system by defining fictitious variables, e.g., d^2x/dt^2 is equal to dv/dt with v = dx/dt.
 */
 
@@ -64,6 +64,23 @@ concept parameterized_ode_rhs_has_param_jacobian = requires(
 
 /* Computing the dimensionality of the ODE system at compile-time
 ode_rhs_dim<F>: the system dimension of an ODE rhs, read statically. A field that knows its dimension exposes it as `static constexpr int dim` (ode_rhs_field does); otherwise it is taken from the compile-time row count of the return type (Dim for a fixed-size return, Dynamic for a dynamic VectorXd) of f(t, y) for a plain rhs, or f(t, y, theta) for a parameterized one. So a user functor opts into the static path simply by returning a fixed-size vector; VectorXd keeps the dynamic path.
+
+PERFORMANCE GUIDANCE (static Dim). 
+The RETURN TYPE of the functor's operator() is what fixes Dim, and Dim switches the whole integrator between two regimes: 
+a fixed-size return (compile-time row count d) makes every stage object (the Stages*d stage vector, the (Stages*d)^2 stage system, 
+the per-stage Jacobians) fixed-size, so the Newton / sensitivity / adjoint solves allocate NO heap and the stage loops unroll; 
+a VectorXd return keeps Dim = Dynamic and every stage evaluation heap-allocates.
+
+    struct field {                                   // static path:  ode_rhs_dim_v<field> == 2, heap-free
+        Eigen::Vector2d operator()(double t, const Eigen::VectorXd& y) const { ... }
+        Eigen::Matrix2d state_jacobian(double t, const Eigen::VectorXd& y) const { ... }   // optional
+    };
+    struct field {                                   // dynamic path: Dim == Dynamic, allocates per stage
+        Eigen::VectorXd operator()(double t, const Eigen::VectorXd& y) const { ... }
+    };
+
+Only the operator() return type matters for the switch (it sets Dim); state_jacobian / param_jacobian may
+return either fixed- or dynamic-size matrices.
 */
 template <typename F> constexpr int ode_rhs_dim() {
     using G = std::decay_t<F>;
@@ -80,9 +97,10 @@ template <typename F> inline constexpr int ode_rhs_dim_v = ode_rhs_dim<F>();
 
 /* RHS field of a Dim-dimensional system of ODEs
 The field is templated on both the system dimension Dim and the concrete rhs functor type F, which it
-stores by value (no type erasure). Storing F directly lets the integrator's stage evaluations and
-Jacobians inline through it -- the hot path of the implicit Newton solve -- instead of routing through a
-std::function. The rhs is either a plain functor f(t, y) or a theta-parameterized one f(t, y, theta); the
+stores by value. Storing F directly lets the integrator's stage evaluations and Jacobians inline through it 
+instead of routing through a std::function. 
+
+The rhs is either a plain functor f(t, y) or a theta-parameterized one f(t, y, theta); the
 parameterized case stores the current theta and binds it internally, so operator()(t, y) is always a
 2-argument callable and the field is a drop-in is_ode_rhs consumed by the integrator / engines unchanged.
 A plain field is exactly the parameterized one with an empty theta (n_params() == 0). It exposes:

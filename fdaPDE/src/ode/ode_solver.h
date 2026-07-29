@@ -23,7 +23,7 @@ namespace fdapde {
 
 
 /* General-purpose ODE solver
-It bundles a right-hand side ode_rhs_field<Dim> with an RKIntegrator<Stages> and exposes the forward initial-value solve together with the local sensitivities of one step.
+It bundles a right-hand side ode_rhs_field<Dim> with an RKIntegrator<Stages> and exposes the forward initial-value solve together with the local sensitivities of single forward and adjoint steps.
 */
 
 template <int Stages, int Dim, typename F>
@@ -52,7 +52,7 @@ class ode_solver {
         return integrator_.flow_jacobian(field_, t, y, dt);
     }
     // forward step together with its flow Jacobian, from a single stage solve
-    std::pair<vector_t, matrix_t> step_with_flow_jacobian(double t, const vector_t& y, double dt) const {
+    rk_fwd_step_t step_with_flow_jacobian(double t, const vector_t& y, double dt) const {
         return integrator_.step_with_flow_jacobian(field_, t, y, dt);
     }
     // parameter sensitivity d y_{n+1}/d theta (d x n_theta) for theta-dependent dynamics bound into the
@@ -64,7 +64,7 @@ class ode_solver {
     }
     // forward step with BOTH its state and parameter Jacobians, from a single stage solve
     template <typename ParamJacobian>
-    std::tuple<vector_t, matrix_t, matrix_t> step_with_state_param_jacobians(
+    rk_fwd_step_t step_with_state_param_jacobians(
       double t, const vector_t& y, double dt, const ParamJacobian& param_jacobian, int n_theta) const {
         return integrator_.step_with_state_param_jacobians(field_, t, y, dt, param_jacobian, n_theta);
     }
@@ -74,9 +74,9 @@ class ode_solver {
     vector_t adjoint_step(double t, const vector_t& y, double dt, const vector_t& p_next) const {
         return integrator_.adjoint_step(field_, t, y, dt, p_next);
     }
-    // adjoint with parameter gradient: returns {p_curr, dC/dtheta} (see RKIntegrator::adjoint_step)
+    // adjoint with parameter gradient: returns {costate, dC/dtheta} (see RKIntegrator::adjoint_step)
     template <typename ParamJacobian>
-    std::pair<vector_t, vector_t> adjoint_step(
+    rk_adj_step_t adjoint_step(
       double t, const vector_t& y, double dt, const vector_t& p_next, const ParamJacobian& param_jacobian) const {
         return integrator_.adjoint_step(field_, t, y, dt, p_next, param_jacobian);
     }
