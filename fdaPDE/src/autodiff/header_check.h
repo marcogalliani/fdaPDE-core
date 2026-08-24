@@ -14,24 +14,6 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __FDAPDE_CORE_MODULE_H__
-#define __FDAPDE_CORE_MODULE_H__
-
-// clang-format off
-
-// include modules
-#include "linear_algebra.h"    // pull Eigen first
-#include "utility.h"
-#include "fields.h"
-#include "geometry.h"
-#include "io.h"
-#include "finite_elements.h"
-#include "splines.h"
-#include "optimization.h"
-#include "ode.h"
-#include "autodiff.h"   // optional: inert unless the autodiff headers are on the include path
-#include "geoframe.h"
-
-// clang-format on
-
-#endif   // __FDAPDE_CORE_MODULE_H__
+#ifndef __FDAPDE_AUTODIFF_MODULE_H__
+#    error "Include fdaPDE/autodiff.h instead of including internal headers directly."
+#endif

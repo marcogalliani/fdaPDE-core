@@ -41,6 +41,8 @@
 #include "src/rand_linear_algebra_test.cpp"
 // ode
 #include "src/ode_test.cpp"
+// autodiff adapter (inert unless the autodiff headers are on the include path, see AUTODIFF_INC)
+#include "src/autodiff_test.cpp"
 /*
 // finite_elements
 #include "src/fem_operators_test.cpp"
