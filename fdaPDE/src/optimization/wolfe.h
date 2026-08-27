@@ -23,9 +23,9 @@
 namespace fdapde {
 
 // wolfe line search method for adaptive step size
+template <int MaxIter = 10>
 class WolfeLineSearch {
    private:
-    static constexpr int max_iter_ = 10;
     double alpha_ = 1.0;
     double alpha_max_ = std::numeric_limits<double>::infinity(), alpha_min_ = 0;
     double c1_ = 1e-4, c2_ = 0.9;
@@ -47,7 +47,7 @@ class WolfeLineSearch {
         double alpha_curr = alpha_;
         double val_prev = val_0;
 
-        for (int i = 0; i < max_iter_; ++i) {
+        for (int i = 0; i < MaxIter; ++i) {
             double val_curr = obj(opt.x_old + alpha_curr * opt.update);
             double grad_curr = grad(opt.x_old + alpha_curr * opt.update).dot(opt.update);
             if (!zooming) {
