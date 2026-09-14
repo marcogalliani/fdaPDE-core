@@ -86,11 +86,18 @@ template <> class DofHandler<1, 1, spline_tag> {
         }
         return result;
     }
-    // In any given knot span [u_i, u_{i+1}) at most p+1 basis functions are non zero, namely N_{i-p,p}, ..., N_{i,p}
-    // (property P2.2, pag 55, Piegl, L., & Tiller, W. (2012). The NURBS book. Springer Science & Business Media.)
+    /* In any given knot span [u_j, u_{j+1}) at most p+1 basis functions are non zero, namely
+    N_{j-p,p}, ..., N_{j,p} (property P2.2, pag 55, Piegl, L., & Tiller, W. (2012). The NURBS book).
+    The dofs active on CELL i are those of the knot span that carries it, cell_span_[i]. With simple
+    interior knots that span is i + order and the map is the familiar {i, ..., i + order}; with repeated
+    knots -- a space whose continuity is lowered at some nodes -- consecutive cells are separated by the
+    multiplicity of the node between them, so the offset is a prefix sum and must be read off the knot
+    vector rather than assumed (see enumerate). */
     std::vector<int> active_dofs(int i) const {
+        fdapde_assert(i >= 0 && i < static_cast<int>(cell_span_.size()));
         std::vector<int> dofs;
-        for (int j = 0; j < order_ + 1; ++j) { dofs.push_back(i + j); }
+        dofs.reserve(order_ + 1);
+        for (int j = 0; j < order_ + 1; ++j) { dofs.push_back(cell_span_[i] - order_ + j); }
         return dofs;
     }
     template <typename ContainerT> void active_dofs(int i, ContainerT& dst) const { dst = active_dofs(i); }
@@ -191,10 +198,22 @@ template <> class DofHandler<1, 1, spline_tag> {
         n_dofs_per_cell_ = order_ + 1;
         dofs_coords_.resize(n_dofs_);
         for (int i = 0; i < n_dofs_; ++i) { dofs_coords_[i] = sp[i].knot(); }
+        /* Map each geometric cell onto the knot span that carries it: the non-empty spans of the knot
+        vector, in order, are exactly the cells. Reading them off the knots (rather than assuming span
+        i + order) is what makes the handler correct for repeated interior knots, where the offset between
+        consecutive cells is the multiplicity of the node between them. */
         int n_cells = triangulation()->n_cells();
+        const std::vector<double>& u = sp.knots_vector();
+        cell_span_.clear();
+        cell_span_.reserve(n_cells);
+        for (int j = order_; j + 1 < static_cast<int>(u.size()) - order_; ++j) {
+            if (u[j] < u[j + 1]) { cell_span_.push_back(j); }
+        }
+        fdapde_assert(static_cast<int>(cell_span_.size()) == n_cells);
+        dofs_.clear();
         for (int j = 0; j < n_cells; ++j) {
-            dofs_.push_back(j);
-	    dofs_.push_back(j + order_);
+            dofs_.push_back(cell_span_[j] - order_);
+            dofs_.push_back(cell_span_[j]);
         }	
         // Regardless of the number of physical dofs at the interval boundary, only the basis functions associated with
         // the first and last dofs are non-zero at the boundary nodes. Hence, we treat only these dofs as boundary dofs
@@ -209,6 +228,7 @@ template <> class DofHandler<1, 1, spline_tag> {
     std::vector<double> dofs_coords_;       // physical knots vector
     BinaryVector<Dynamic> boundary_dofs_;   // whether the i-th dof is on boundary or not
     std::vector<int> dofs_;
+    std::vector<int> cell_span_;            // knot span carrying each geometric cell (see enumerate)
     int n_dofs_per_cell_ = 0, n_dofs_ = 0;
     std::vector<int> dofs_markers_;
     const TriangulationType* triangulation_;
