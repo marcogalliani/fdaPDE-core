@@ -53,21 +53,20 @@ class BSplineBasis {
         // construct knots vector
         Eigen::Matrix<double, Dynamic, 1> knots = interval.nodes();
         fdapde_assert(std::is_sorted(knots.begin() FDAPDE_COMMA knots.end() FDAPDE_COMMA std::less_equal<double>()));
-        int n = knots.size();
-        knots_.resize(n + 2 * order_);
-        // pad the knot vector to obtain a full basis for the whole knot span [knots[0], knots[n-1]]
-        for (int i = 0; i < n + 2 * order_; ++i) {
-            if (i < order_) {
-                knots_[i] = knots[0];
-            } else {
-                if (i < n + order_) {
-                    knots_[i] = knots[i - order_];
-                } else {
-                    knots_[i] = knots[n - 1];
-                }
-            }
-	}
-        // define basis system
+        knots_ = build_knots(knots, order_, std::vector<int>(knots.size(), 1));
+        basis_.reserve(knots_.size() - order_ + 1);
+        for (std::size_t i = 0; i < knots_.size() - order_ - 1; ++i) { basis_.emplace_back(knots_, i, order_); }
+    }
+    /* Constructor from an interval with per-node knot MULTIPLICITY. Repeating an interior knot mu times
+    lowers the continuity there to C^(order-mu). `multiplicity` carries one entry per node of
+    the interval; the two boundary entries are ignored, since a clamped vector always repeats them
+    order + 1 times. Its dimension is order + 1 + sum over INTERIOR nodes of mu_i. */
+    BSplineBasis(const Triangulation<1, 1>& interval, int order, const std::vector<int>& multiplicity) :
+        order_(order) {
+        Eigen::Matrix<double, Dynamic, 1> knots = interval.nodes();
+        fdapde_assert(std::is_sorted(knots.begin() FDAPDE_COMMA knots.end() FDAPDE_COMMA std::less_equal<double>()));
+        fdapde_assert(static_cast<int>(multiplicity.size()) == knots.size());
+        knots_ = build_knots(knots, order_, multiplicity);
         basis_.reserve(knots_.size() - order_ + 1);
         for (std::size_t i = 0; i < knots_.size() - order_ - 1; ++i) { basis_.emplace_back(knots_, i, order_); }
     }
@@ -77,6 +76,31 @@ class BSplineBasis {
     constexpr const std::vector<double>& knots_vector() const { return knots_; }
     int n_knots() const { return knots_.size(); }
     int order() const { return order_; }
+   private:
+    
+    /* Knot vector over a set of breakpoints: the two boundary breakpoints repeated
+    order + 1 times, interior breakpoint i repeated multiplicity[i] times. With every interior
+    multiplicity equal to 1 this is the classical open knot vector of n + 2*order knots and n + order - 1
+    basis functions; in general it has 2*(order+1) + sum_{interior} mu_i knots. */
+    template <typename BreakpointsType>
+        requires(requires(BreakpointsType breakpoints, int i) {
+                    { breakpoints[i] } -> std::convertible_to<double>;
+                    { breakpoints.size() } -> std::convertible_to<std::size_t>;
+                })
+    static std::vector<double>
+    build_knots(const BreakpointsType& breakpoints, int order, const std::vector<int>& multiplicity) {
+        int n = breakpoints.size();
+        fdapde_assert(n > 1 && order >= 0 && static_cast<int>(multiplicity.size()) == n);
+        std::vector<double> knots;
+        knots.reserve(n + 2 * order);
+        for (int r = 0; r <= order; ++r) { knots.push_back(breakpoints[0]); }
+        for (int i = 1; i + 1 < n; ++i) {
+            fdapde_assert(multiplicity[i] >= 1 && multiplicity[i] <= order + 1);
+            for (int r = 0; r < multiplicity[i]; ++r) { knots.push_back(breakpoints[i]); }
+        }
+        for (int r = 0; r <= order; ++r) { knots.push_back(breakpoints[n - 1]); }
+        return knots;
+    }
 };
 
 } // namespace fdapde

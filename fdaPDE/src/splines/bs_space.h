@@ -22,7 +22,7 @@
 namespace fdapde {
 
 // forward declarations
-template <typename SpSpace_> class SpFunction;
+template <typename SpSpace_> class BsFunction;
 namespace internals {
 
 template <typename Triangulation_, typename Form_, int Options_, typename... Quadrature_>
@@ -57,22 +57,36 @@ template <typename Triangulation_> class BsSpace {
 
     BsSpace() = default;
     BsSpace(const Triangulation_& interval, int order) :
+        BsSpace(interval, order, std::vector<int>(interval.n_nodes(), 1)) { }
+    /* Spline space with per-node knot multiplicity. Continuity at a node of multiplicity mu is
+    C^(order-mu), so `multiplicity` says, node by node, how smooth the space is there: 1 is the classical
+    maximally smooth space, order gives C0, order + 1 gives a broken space. It carries one entry per node
+    of the interval; the two boundary entries are ignored, a clamped vector always repeating them
+    order + 1 times.
+
+    This is the general constructor. A caller that computes the pattern itself -- a solver lowering the
+    continuity where data is observed, say -- passes it directly and needs nothing from the geometry. */
+    BsSpace(const Triangulation_& interval, int order, const std::vector<int>& multiplicity) :
         triangulation_(std::addressof(interval)),
         dof_handler_(interval),
-        physical_basis_(interval, order),
-        order_(order) {
+        physical_basis_(interval, order, multiplicity),
+        order_(order),
+        multiplicity_(multiplicity) {
+        fdapde_assert(static_cast<int>(multiplicity.size()) == interval.n_nodes());
         a_ = triangulation_->bbox()[0], b_ = triangulation_->bbox()[1];   // store interval range
-        dof_handler_.enumerate(BasisType(interval, order));
+        dof_handler_.enumerate(physical_basis_);
 	// build reference [-1, 1] interval with nodes mapped from physical interval [a, b]
         Eigen::Matrix<double, Dynamic, 1> ref_nodes(triangulation_->n_nodes());
         for (int i = 0; i < triangulation_->n_nodes(); ++i) {
             ref_nodes[i] = map_to_reference(triangulation_->nodes()(i, 0));
         }
-        // generate basis on reference [-1, 1] interval
-        basis_ = BasisType(Triangulation(ref_nodes), order);
+        // generate basis on reference [-1, 1] interval, with the same multiplicity pattern
+        basis_ = BasisType(Triangulation(ref_nodes), order, multiplicity);
     }
+    
     // observers
     const Triangulation& triangulation() const { return *triangulation_; }
+    const std::vector<int>& node_multiplicity() const { return multiplicity_; }
     const DofHandlerType& dof_handler() const { return dof_handler_; }
     DofHandlerType& dof_handler() { return dof_handler_; }
     constexpr int n_shape_functions() const { return basis_.size(); }
@@ -125,7 +139,7 @@ template <typename Triangulation_> class BsSpace {
         return eval_shape_value(i, Matrix<double, embed_dim, 1>(map_to_reference(p_)));
     }
     // return i-th basis function on physical domain
-    SpFunction<BsSpace<Triangulation_>> operator[](int i) {
+    BsFunction<BsSpace<Triangulation_>> operator[](int i) {
         fdapde_assert(i < dof_handler_.n_dofs());
 	Eigen::Matrix<double, Dynamic, 1> coeff = Eigen::Matrix<double, Dynamic, 1>::Zero(dof_handler_.n_dofs());
 	coeff[i] = 1;
@@ -141,6 +155,7 @@ template <typename Triangulation_> class BsSpace {
     BasisType physical_basis_;     // basis over physical interval [a, b]
     BasisType basis_;              // basis_ over reference interval [-1, +1]
     int order_;                    // spline order
+    std::vector<int> multiplicity_;   // knot multiplicity at each node of the interval
 };
 
 }   // namespace fdapde

@@ -262,14 +262,14 @@ template <typename SpSpace_> class BsFunction : public ScalarFieldBase<SpSpace_:
         coeff_ = Eigen::Matrix<double, Dynamic, 1>::Zero(sp_space_->n_dofs());
     }
     BsFunction(SpSpace_& sp_space, const Eigen::Matrix<double, Dynamic, 1>& coeff) :
-        sp_space_(std::addressof(sp_space)), coeff_(coeff) {
+        coeff_(coeff), sp_space_(std::addressof(sp_space)) {
         fdapde_assert(coeff.size() > 0 && coeff.size() == sp_space_->n_dofs());
     }
     Scalar operator()(const InputType& p) const { 
         int e_id = sp_space_->triangulation().locate(p);
         if (e_id == -1) return std::numeric_limits<Scalar>::quiet_NaN();   // return NaN if point lies outside domain
         // map p to reference interval [-1, 1]
-        double a = sp_space_->triangulation().range()[0], b = sp_space_->triangulation().range()[1];
+        double a = sp_space_->triangulation().bbox()[0], b = sp_space_->triangulation().bbox()[1];
         double p_;
         if constexpr (internals::is_subscriptable<InputType, int>) {
             p_ = p[0];
