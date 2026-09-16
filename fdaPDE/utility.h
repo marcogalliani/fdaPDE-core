@@ -29,6 +29,7 @@
 #include <limits>
 #include <memory>   // for std::shared_ptr
 #include <optional>
+#include <variant>
 #include <random>
 #include <type_traits>
 #include <typeindex>
