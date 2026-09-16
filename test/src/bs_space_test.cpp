@@ -78,10 +78,9 @@ TEST(bs_space_test, node_multiplicity_controls_dimension_and_continuity) {
     }
 }
 
-/* Multiplicity is per NODE, not global: raising it only where data is observed leaves the space smooth
-everywhere else. This is the case the ODE penalty needs -- the collocation trajectory is C0 exactly at the
-nodes it steps through, and smooth in between -- so it is pinned directly: a cubic space with multiplicity
-3 at the selected nodes must kink there and stay C2 at the rest. */
+/* Multiplicity is per NODE, not global: raising it at selected nodes leaves the space smooth everywhere
+else. Pinned directly: a cubic space with multiplicity 3 at the selected nodes must kink there and stay C2
+at the rest. */
 TEST(bs_space_test, multiplicity_is_raised_only_where_asked) {
     const auto t = nodes();
     const int m = t.size(), p = 3;
@@ -115,8 +114,8 @@ TEST(bs_space_test, multiplicity_is_raised_only_where_asked) {
 }
 
 /* The multiplicity pattern is per node and arbitrary: it is not a single rule applied uniformly, so a
-caller holding a pattern of its own -- a solver that knows where data is observed, say -- expresses it
-exactly. Constructing a space is also a read-only act on the geometry: nothing is recorded on the mesh. */
+caller holding a pattern of its own expresses it exactly. Constructing a space is also a read-only act on
+the geometry: nothing is recorded on the mesh. */
 TEST(bs_space_test, multiplicity_vector_carries_an_arbitrary_pattern) {
     const auto t = nodes();
     const int m = t.size(), p = 3;

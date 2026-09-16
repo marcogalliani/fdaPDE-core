@@ -33,9 +33,6 @@
 // general-purpose ode solver (forward integration + sensitivities)
 #include "src/ode/ode_solver.h"
 
-// control-aware ode solver (additive-control forcing + type-erased engine)
-#include "src/ode/controlled_ode_solver.h"
-
 // clang-format on
 
 #endif   // __FDAPDE_ODE_MODULE_H__

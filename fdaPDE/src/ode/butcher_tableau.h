@@ -59,8 +59,8 @@ struct ButcherTableau {
         }
         // a method is a COLLOCATION method iff its nodes c_i are pairwise distinct: the s stage values then
         // determine a unique degree-s polynomial through the step, of which the k_i are the derivatives at
-        // the c_i. This is what makes a continuous extension (dense output) exist at all -- rk4 fails it
-        // (c = 0, 1/2, 1/2, 1), so no polynomial interpolates its stages and it has no dense output here.
+        // the c_i. This is what makes the stage values samples of one polynomial at all -- rk4 fails it
+        // (c = 0, 1/2, 1/2, 1), so no polynomial interpolates its stages.
         is_collocation_ = true;
         for (int i = 0; i < Stages && is_collocation_; ++i) {
             for (int j = i + 1; j < Stages; ++j) {
@@ -72,7 +72,7 @@ struct ButcherTableau {
         // backward in time -- so the stage adjoints are collocation values of the continuous adjoint
         // equation, on the same nodes when the c_i are symmetric about 1/2. Gauss-Legendre schemes satisfy
         // both; Radau IIA / Lobatto IIIA / the explicit schemes do not. Only under this flag may stage
-        // costates (and the optimal control they define) be evaluated with the dense-output weights.
+        // costates (and the optimal control they define) be interpolated on the forward nodes.
         is_symplectic_ = true;
         for (int i = 0; i < Stages && is_symplectic_; ++i) {
             for (int j = 0; j < Stages; ++j) {
@@ -156,9 +156,8 @@ built from the DEFINING property of a collocation method,
     A_ij = int_0^{c_i} l_j(tau) dtau,
 
 l_j being the Lagrange basis on the nodes. That identity is what makes the scheme a collocation method at
-all (it is the same relation RKIntegrator::dense_weights evaluates at arbitrary theta, of which beta_j(c_i)
-= A_ij is the special case), so deriving A from it is exact and self-checking: ode_test verifies the result
-against the order and symplecticity conditions.
+all (it is also what makes each stage value the step's polynomial at c_i), so deriving A from it is exact and
+self-checking: ode_test verifies the result against the order and symplecticity conditions.
 
 GL4 is the smallest Gauss scheme whose stage space carries a CUBIC control: a control basis of degree p is
 represented exactly by the s stage values only when p <= s - 1, so degree 3 needs s = 4. */
