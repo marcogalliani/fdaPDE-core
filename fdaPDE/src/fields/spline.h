@@ -165,8 +165,9 @@ class Spline : public ScalarFieldBase<1, Spline> {
     constexpr Derivative gradient(int n = 1) const { return Derivative(knots_, i_, order_, n); }
     const std::vector<double>& knot_vector() const { return knots_; }
     int order() const { return order_; }
-    int knot_id() const { return i_ + order_ - 1; }
-    double knot() const { return knots_[i_ + order_ - 1]; }
+    // order 0 has no knot left of the first element's span: clamp, rather than read before the vector
+    int knot_id() const { return std::max(i_ + order_ - 1, 0); }
+    double knot() const { return knots_[knot_id()]; }
     constexpr int input_size() const { return StaticInputSize; }
    private:
     std::vector<double> knots_ {};

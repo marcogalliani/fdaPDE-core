@@ -45,6 +45,10 @@ class ode_solver {
     matrix_t solve(const vector_t& times, const vector_t& y0) const {
         return integrator_.integrate(field_, times, y0);
     }
+    // forward step that also returns its stage values (see RKIntegrator::step_with_stage_values)
+    rk_stage_step_t step_with_stage_values(double t, const vector_t& y, double dt) const {
+        return integrator_.step_with_stage_values(field_, t, y, dt);
+    }
 
     // Forward-mode sensitivities
     // state (flow) Jacobian d y_{n+1}/d y = I + dt * dPhi/dy

@@ -64,23 +64,6 @@ concept parameterized_ode_rhs_has_param_jacobian = requires(
 
 /* Computing the dimensionality of the ODE system at compile-time
 ode_rhs_dim<F>: the system dimension of an ODE rhs, read statically. A field that knows its dimension exposes it as `static constexpr int dim` (ode_rhs_field does); otherwise it is taken from the compile-time row count of the return type (Dim for a fixed-size return, Dynamic for a dynamic VectorXd) of f(t, y) for a plain rhs, or f(t, y, theta) for a parameterized one. So a user functor opts into the static path simply by returning a fixed-size vector; VectorXd keeps the dynamic path.
-
-PERFORMANCE GUIDANCE (static Dim). 
-The RETURN TYPE of the functor's operator() is what fixes Dim, and Dim switches the whole integrator between two regimes: 
-a fixed-size return (compile-time row count d) makes every stage object (the Stages*d stage vector, the (Stages*d)^2 stage system, 
-the per-stage Jacobians) fixed-size, so the Newton / sensitivity / adjoint solves allocate NO heap and the stage loops unroll; 
-a VectorXd return keeps Dim = Dynamic and every stage evaluation heap-allocates.
-
-    struct field {                                   // static path:  ode_rhs_dim_v<field> == 2, heap-free
-        Eigen::Vector2d operator()(double t, const Eigen::VectorXd& y) const { ... }
-        Eigen::Matrix2d state_jacobian(double t, const Eigen::VectorXd& y) const { ... }   // optional
-    };
-    struct field {                                   // dynamic path: Dim == Dynamic, allocates per stage
-        Eigen::VectorXd operator()(double t, const Eigen::VectorXd& y) const { ... }
-    };
-
-Only the operator() return type matters for the switch (it sets Dim); state_jacobian / param_jacobian may
-return either fixed- or dynamic-size matrices.
 */
 template <typename F> constexpr int ode_rhs_dim() {
     using G = std::decay_t<F>;

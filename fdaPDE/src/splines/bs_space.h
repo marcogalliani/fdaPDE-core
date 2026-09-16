@@ -64,8 +64,8 @@ template <typename Triangulation_> class BsSpace {
     of the interval; the two boundary entries are ignored, a clamped vector always repeating them
     order + 1 times.
 
-    This is the general constructor. A caller that computes the pattern itself -- a solver lowering the
-    continuity where data is observed, say -- passes it directly and needs nothing from the geometry. */
+    This is the general constructor: a caller holding its own pattern passes it directly, and nothing is
+    recorded on the geometry. */
     BsSpace(const Triangulation_& interval, int order, const std::vector<int>& multiplicity) :
         triangulation_(std::addressof(interval)),
         dof_handler_(interval),

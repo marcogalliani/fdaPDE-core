@@ -59,11 +59,21 @@ struct rk_fwd_step_t {
     Eigen::Matrix<double, Dynamic, Dynamic> flow;   // d y_{n+1} / d y_n
     Eigen::Matrix<double, Dynamic, Dynamic> param;  // d y_{n+1} / d theta  (d y_{n+1}/d u for a control); empty if unset
 };
+// a forward step together with its stage VALUES Y_i = y_n + dt sum_j a_ij k_j (columns of .values, d x Stages).
+// For a collocation method a_ij = int_0^{c_i} l_j, so Y_i is the step's polynomial at t + c_i*dt: with the
+// endpoint y_n the stage values determine that polynomial, i.e. the whole solution on the interval.
+struct rk_stage_step_t {
+    Eigen::Matrix<double, Dynamic, 1> state;         // y_{n+1}
+    Eigen::Matrix<double, Dynamic, Dynamic> values;  // Y_i, column i  (d x Stages)
+};
 // the discrete adjoint of one step: the propagated costate and, optionally, the parameter (or control) cost
 // gradient -- param_grad is left empty when only the costate is requested.
 struct rk_adj_step_t {
     Eigen::Matrix<double, Dynamic, 1> costate;      // p_curr = dC / dy_n
     Eigen::Matrix<double, Dynamic, 1> param_grad;   // dC / dtheta  (dC/du for a control); empty if unset
+    // the stage costates psi_i = lam_i / (dt * b_i), column i (d x Stages); empty if unset. See
+    // adjoint_step_with_stages for what these are and when they may be read as collocation data.
+    Eigen::Matrix<double, Dynamic, Dynamic> stages;
 };
 
 
@@ -198,7 +208,6 @@ class RKIntegrator {
     // y' = f(t, y, theta). f is the already theta-bound field and param_jacobian(t, y) -> R^{d x n_theta} its
     // parameter Jacobian. Same stage machinery as step_with_state_param_jacobians: the stage system is
     // solved once and its Jacobian reused, only the sensitivity right-hand side changes.
-    // TODO: check if really needed
     template <int Dim, typename F, typename ParamJacobian>
     matrix_t step_param_jacobian(
       const ode_rhs_field<Dim, F>& f, double t, const vector_t& y, double dt, const ParamJacobian& param_jacobian, int n_theta) const {
@@ -244,6 +253,54 @@ class RKIntegrator {
             g += D.transpose() * vector_t(lam.segment(i * d, d));
         }
         return {p_curr, g};
+    }
+    // forward step that also returns its stage VALUES Y_i = y + dt sum_j a_ij k_j (see rk_stage_step_t)
+    template <int Dim, typename F>
+    rk_stage_step_t
+    step_with_stage_values(const ode_rhs_field<Dim, F>& f, double t, const vector_t& y, double dt) const {
+        const int d = y.size();
+        auto K = solve_stages_(f, t, y, dt);
+        matrix_t values(d, Stages);
+        vector_t next = y;
+        for (int i = 0; i < Stages; ++i) {
+            values.col(i) = y;
+            for (int j = 0; j < Stages; ++j) { values.col(i) += dt * tableau_.A()[i][j] * K.segment(j * d, d); }
+            next += dt * tableau_.b()[i] * K.segment(i * d, d);
+        }
+        return {next, values};
+    }
+
+    // discrete adjoint of one step, additionally returning the STAGE COSTATES
+    //   psi_i = lam_i / (dt * b_i),   returned as the columns of .stages (d x Stages).
+    //
+    // Rescaling the stage adjoints lam_i this way turns the adjoint stage system solved by
+    // adjoint_stage_solve_ into a Runge-Kutta step for the adjoint equation p' = -J_f(t, y(t))^T p,
+    // integrated backward over [t, t + dt]: dividing row i of  lam_i - dt sum_j A_ji J_j^T lam_j = dt b_i p_next
+    // by dt*b_i gives
+    //   psi_i = p_next + dt sum_j (b_j A_ji / b_i) J_j^T psi_j,      p_curr = p_next + dt sum_i b_i J_i^T psi_i
+    // i.e. the tableau with coefficients  ahat_ij = b_j a_ji / b_i  on the reflected nodes 1 - c_i.
+    //
+    // For a SYMPLECTIC tableau (b_i a_ij + b_j a_ji = b_i b_j) this collapses to ahat_ij = b_j - a_ij: the
+    // adjoint is the *same* method run backward. Gauss-Legendre schemes are symplectic and their nodes are
+    // symmetric about 1/2, so the reflection 1 - c_i merely permutes the node set. Both together are what
+    // let psi_i be read as the values at t + c_i*dt of the collocation polynomial of the adjoint equation --
+    // the same nodes, and hence the same Lagrange basis, as the forward stage values. That reading is the
+    // basis for continuous evaluation of the costate (and of the optimal control u = psi/(2*lambda)).
+    //
+    // OFF the Gauss family none of that holds: the psi_i are still the exact discrete adjoint (the DtO
+    // gradient is exact for any tableau), but they are stage values of a *different* method on *moved*
+    // nodes, so they must not be interpolated on the forward nodes. Requires b_i != 0.
+    template <int Dim, typename F>
+    rk_adj_step_t adjoint_step_with_stages(
+      const ode_rhs_field<Dim, F>& f, double t, const vector_t& y, double dt, const vector_t& p_next) const {
+        const int d = y.size(), ns = Stages;
+        auto [p_curr, lam, K] = adjoint_stage_solve_(f, t, y, dt, p_next);
+        matrix_t psi(d, ns);
+        for (int i = 0; i < ns; ++i) {
+            fdapde_assert(tableau_.b()[i] != 0.0);
+            psi.col(i) = lam.segment(i * d, d) / (dt * tableau_.b()[i]);
+        }
+        return {p_curr, vector_t(), psi};
     }
 
    private:
