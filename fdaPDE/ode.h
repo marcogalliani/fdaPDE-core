@@ -22,9 +22,10 @@
 // include required modules
 #include "linear_algebra.h"    // pull Eigen first
 #include "utility.h"
+#include "fields.h"            // ode_system writes its equations as scalar-field expressions
 
-// ode right-hand side (concepts, field wrapper, theta-parameterized dynamics)
-#include "src/ode/ode_rhs.h"
+// ode right-hand side: concepts, the field wrapper, and the strong form (unknowns, parameters, equations)
+#include "src/ode/ode_system.h"
 
 // time-integration primitives
 #include "src/ode/butcher_tableau.h"
