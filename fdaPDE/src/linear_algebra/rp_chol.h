@@ -60,15 +60,11 @@ class RpChol {
             // sample pivots with a probabilty proportional to diagonal elements of residuals
             std::discrete_distribution<int> distr(diag_res.begin(), diag_res.end());
             std::unordered_set<int> pivot_set(block_sz_);
-            for (std::size_t j = 0; pivot_set.size() < block_sz_ && j < 2 * block_sz_; j++) {
+            for (int j = 0; (int)pivot_set.size() < block_sz_ && j < 2 * block_sz_; j++) {
                 pivot_set.insert(distr(rng));
             }
             pivot_set_.merge(pivot_set);
-            std::vector<int> pivot_vec(pivot_set.begin(), pivot_set.end());
-
-	    for(int kk : pivot_vec) std::cout << kk << " ";
-	    std::cout << std::endl;
-	    
+            std::vector<int> pivot_vec(pivot_set.begin(), pivot_set.end());	    
             // evaluate columns at pivot_set, remove overlap with previously choosen columns
             matrix_t G = A(Eigen::all, pivot_vec) - L_.leftCols(i) * L_(pivot_vec, Eigen::all).leftCols(i).transpose();
             // compute stabilized cholesky
