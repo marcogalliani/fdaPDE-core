@@ -23,24 +23,50 @@ namespace fdapde {
 namespace internals {
 
 // apply lambda F_ to each value in index pack {0, ..., N_ - 1}
+// Apple-Clang-15 workaround: extracted the inner templated generic lambda into a separate
+// function template so the call to `f.template operator()<Ns_...>()` happens at the named-
+// function level rather than inside an embedded lambda. The original lambda form crashes
+// clang during return-type deduction when invoked from contexts with surrounding template
+// parameter packs.
+template <typename F_, int... Ns_>
+constexpr decltype(auto) apply_index_pack_impl_(F_&& f, std::integer_sequence<int, Ns_...>) {
+    return f.template operator()<Ns_...>();
+}
 template <int N_, typename F_> constexpr decltype(auto) apply_index_pack(F_&& f) {
-    return [&]<int... Ns_>(std::integer_sequence<int, Ns_...>) -> decltype(auto) {
-        return f.template operator()<Ns_...>();
-    }(std::make_integer_sequence<int, N_> {});
+    return apply_index_pack_impl_(std::forward<F_>(f), std::make_integer_sequence<int, N_> {});
+}
+// Apple-Clang-15 workaround: the original implementations used a templated generic lambda
+// containing a fold expression `(f.template operator()<Ns_>(), ...)`. Instantiating that pattern
+// crashes clang in collectUnexpandedParameterPacks / TransformCXXFoldExpr whenever the caller is
+// itself inside a context with outer parameter packs. The recursive forms below are equivalent
+// and avoid both the fold expression and the templated generic lambda.
+template <int N_, int I_, typename F_> constexpr void for_each_index_in_pack_impl_(F_&& f) {
+    if constexpr (I_ < N_) {
+        f.template operator()<I_>();
+        for_each_index_in_pack_impl_<N_, I_ + 1>(std::forward<F_>(f));
+    }
 }
 template <int N_, typename F_> constexpr void for_each_index_in_pack(F_&& f) {
-    [&]<int... Ns_>(std::integer_sequence<int, Ns_...>) {
-        (f.template operator()<Ns_>(), ...);
-    }(std::make_integer_sequence<int, N_> {});
+    for_each_index_in_pack_impl_<N_, 0>(std::forward<F_>(f));
 }
 
 // apply lambda F_ to each index and args pair {(0, args[0]), ..., (N_ - 1, args[N_ - 1])}
+// Recursive form (no fold expression, no templated generic lambda) to avoid the Apple Clang 15
+// ICE described above. Note: for an rvalue argument of type A, F_ receives A&& (not A) as its
+// type template parameter; callers should decay it before testing it with type traits.
+template <int I_, int N_, typename F_, typename Tuple_>
+constexpr void for_each_index_and_args_impl_(F_&& f, Tuple_&& tuple) {
+    if constexpr (I_ < N_) {
+        using elem_t = std::tuple_element_t<I_, std::remove_reference_t<Tuple_>>;
+        f.template operator()<I_, elem_t>(std::get<I_>(std::forward<Tuple_>(tuple)));
+        for_each_index_and_args_impl_<I_ + 1, N_>(std::forward<F_>(f), std::forward<Tuple_>(tuple));
+    }
+}
 template <int N_, typename F_, typename... Args_>
     requires(sizeof...(Args_) == N_)
 constexpr void for_each_index_and_args(F_&& f, Args_&&... args) {
-    [&]<int... Ns_>(std::integer_sequence<int, Ns_...>) {
-        (f.template operator()<Ns_, Args_>(std::forward<Args_>(args)), ...);
-    }(std::make_integer_sequence<int, N_> {});
+    for_each_index_and_args_impl_<0, N_>(
+      std::forward<F_>(f), std::forward_as_tuple(std::forward<Args_>(args)...));
 }
 
 // a tuple of pairs {{0, T_0}, {1, T_1}, ..., {N, T_N}}
@@ -154,6 +180,16 @@ template <typename T, int Order, typename IndexT> class is_indexable {
 template <typename T, int Order, typename IndexT>
 static constexpr bool is_indexable_v = is_indexable<T, Order, IndexT>::value;
   
+// detects if T has an int size method
+// Apple-Clang-15 workaround: the `{ t.size() } -> std::convertible_to<int>` requires-expression is
+// extracted into a standalone concept rather than embedded inline in the IIFE lambda body of
+// is_vector_like. The inline form crashes Apple Clang 15 in Sema::BuildExprRequirement /
+// TransformLambdaExpr when substituting through nested return-type-requirements.
+template <typename T>
+concept is_int_sized = requires(T t) {
+    { t.size() } -> std::convertible_to<int>;
+};
+
 // detects if T behaves like a vector
 template <typename T> class is_vector_like {
     using T_ = std::decay_t<T>;
@@ -165,9 +201,7 @@ template <typename T> class is_vector_like {
         } else
 #endif
             return (is_subscriptable<T_, int> || (is_indexable_v<T_, 1, int> && !is_indexable_v<T_, 2, int>)) &&
-                   requires(T_ t) {
-                       { t.size() } -> std::convertible_to<int>;
-                   };
+                   is_int_sized<T_>;
     }();
 };
 template <typename T> static constexpr bool is_vector_like_v = is_vector_like<T>::value;
@@ -193,6 +227,21 @@ template <typename T> class is_matrix_like {
    };
 };
 template <typename T> static constexpr bool is_matrix_like_v = is_matrix_like<T>::value;
+
+// detects if T behaves like a matrix block (exposes a Scalar type, rows() and cols())
+// Apple-Clang-15 workaround: lifted to namespace scope from an IIFE-of-requires trait inside
+// SparseBlockMatrix, which crashes Apple Clang 15 in Sema::BuildExprRequirement.
+template <typename T>
+concept is_matrix_blk = requires(T t) {
+    typename std::decay_t<T>::Scalar;
+    { t.rows() } -> std::convertible_to<std::size_t>;
+    { t.cols() } -> std::convertible_to<std::size_t>;
+};
+// detects if T is a matrix block whose Scalar type converts to Scalar. Being a concept, the
+// conjunction short-circuits: for non-block types (e.g. the 0 placeholder of SparseBlockMatrix)
+// it is false instead of a hard error on the missing T::Scalar.
+template <typename T, typename Scalar>
+concept is_matrix_blk_of = is_matrix_blk<T> && std::convertible_to<typename std::decay_t<T>::Scalar, Scalar>;
 
 // get i-th element from parameter pack
 template <int N, typename... Ts>

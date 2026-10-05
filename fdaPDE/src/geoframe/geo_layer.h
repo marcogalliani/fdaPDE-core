@@ -242,6 +242,16 @@ struct GeoLayer {
         return value_;
     }();
 
+    // Helper for the row_filter-subsetting constructor below: declared (not defined) so that
+    // `decltype(geo_data_storage_helper_(std::make_index_sequence<Order>{}))` computes the
+    // storage tuple type without an embedded templated generic lambda. The lambda form crashes
+    // Apple Clang 15 when this ctor is instantiated through return-type deduction of
+    // insert_scalar_layer_.
+    template <std::size_t... Is>
+    static auto geo_data_storage_helper_(std::index_sequence<Is...>)
+      -> std::tuple<std::vector<
+        typename std::tuple_element_t<Is, GeoInfo>::template value_type<local_dim[Is], embed_dim[Is]>>...>;
+
    public:
     // constructor
     GeoLayer(triangulation_t triangulation) :
@@ -288,11 +298,14 @@ struct GeoLayer {
         extents_(),
         structured_(false) {
         std::fill(strides_.begin(), strides_.end(), 1);   // unstructured layer by construction
-	// collect geometry from filtering predicate
-        using mem_t = decltype(internals::apply_index_pack<Order>([]<int... Ns>() {
-            return std::tuple<std::vector<
-              typename std::tuple_element_t<Ns, GeoInfo>::template value_type<local_dim[Ns], embed_dim[Ns]>>...> {};
-        }));
+        // collect geometry from filtering predicate
+        // Apple-Clang-15 workaround: the original
+        //   `using mem_t = decltype(internals::apply_index_pack<Order>([]<int... Ns>() {...}));`
+        // form embedded a templated generic lambda inside `decltype(apply_index_pack<...>(...))`.
+        // When this ctor is instantiated through return-type deduction of insert_scalar_layer_,
+        // clang crashes substituting through the lambda. Use a static helper-fn declaration to
+        // compute the same type via trailing return type and std::index_sequence (no lambda).
+        using mem_t = decltype(geo_data_storage_helper_(std::make_index_sequence<Order> {}));
         mem_t geo_data;
         for (int i = 0, n = row_filter.rows(); i < n; ++i) {
             auto geometry = row_filter.geometry(i);

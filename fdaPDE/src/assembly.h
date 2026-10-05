@@ -160,7 +160,7 @@ template <typename Triangulation_, typename Xpr_, int Options_, typename... Quad
     double operator()() const {
         double integral_ = 0;
         if constexpr (Quadrature::order == 0) {
-            fdapde_static_assert(false, THIS_METHOD_REQUIRES_A_QUADRATURE_RULE);
+            fdapde_static_assert(Quadrature::order != 0, THIS_METHOD_REQUIRES_A_QUADRATURE_RULE);
         } else {
             fdapde_static_assert(Triangulation::local_dim == Quadrature::local_dim, INVALID_QUADRATURE_RULE);
             constexpr int n_quadrature_nodes = Quadrature::order;
