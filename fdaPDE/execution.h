@@ -21,20 +21,46 @@
 
 namespace fdapde {
 
+/// @brief selects parallel execution
 struct execution_par_t { };
+/// @brief selects sequential execution
 struct execution_seq_t { };
 static constexpr execution_par_t execution_par;
 static constexpr execution_seq_t execution_seq;
 
 }   // namespace fdapde
 
-#include "utility.h"
-
+#include <algorithm>
 #include <atomic>
-#include <mutex>
+#include <charconv>
+#include <cmath>
+#include <concepts>
+#include <condition_variable>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+#include <exception>
+#include <functional>
 #include <future>
+#include <iterator>
 #include <latch>
+#include <limits>
+#include <memory>
+#include <mutex>
+#include <new>
+#include <numeric>
+#include <optional>
+#include <queue>
+#include <random>
+#include <stdexcept>
+#include <string_view>
+#include <thread>
+#include <tuple>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
+#include "src/utility/assert.h"
 #include "src/execution/concurrency.h"
 
 // basic threaded runtime
