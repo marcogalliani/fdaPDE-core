@@ -80,7 +80,8 @@ template <int N> class LBFGS {
         x_mem_.resize(x0.rows(), mem_size_);
         grad_mem_.resize(x0.rows(), mem_size_);
 
-        while (n_iter_ < max_iter_ && error > tol_ && !stop) {
+        // a non-finite error makes `error > tol_` false, which would exit the loop as if converged
+        while (n_iter_ < max_iter_ && error > tol_ && std::isfinite(error) && !stop) {
             stop |= internals::exec_adapt_hooks(*this, objective, callbacks_);
             // update along descent direction
             x_new = x_old + h * update;

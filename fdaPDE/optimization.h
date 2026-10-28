@@ -68,6 +68,8 @@ template <typename Opt> static constexpr bool is_gradient_free_opt_v = is_gradie
 #include "src/optimization/gradient_descent.h"
 #include "src/optimization/conjugate_gradient.h"
 #include "src/optimization/bfgs.h"
+#include "src/optimization/trust_region.h"
+#include "src/optimization/levenberg_marquardt.h"
 #include "src/optimization/lbfgs.h"
 #include "src/optimization/nelder_mead.h"
 
